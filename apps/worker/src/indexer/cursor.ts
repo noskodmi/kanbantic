@@ -2,6 +2,9 @@ import { applyMigrations } from "../db/migrate.js";
 import type { Env } from "../env.js";
 import { decode } from "./decode.js";
 import { handleAgentEvent } from "./handlers/agent.js";
+import { handleArbiterEvent } from "./handlers/arbiter.js";
+import { handleBountyEvent } from "./handlers/bounty.js";
+import { handleReputationEvent } from "./handlers/reputation.js";
 import { handleWorkspaceEvent } from "./handlers/workspace.js";
 import { blockNumber, fetchLogs } from "./poll.js";
 
@@ -73,9 +76,13 @@ export class IndexerCursor implements DurableObject {
             await handleAgentEvent(this.env.DB, decoded, ts);
             break;
           case "BountyBoard":
+            await handleBountyEvent(this.env.DB, decoded, ts);
+            break;
           case "ReputationAttestor":
+            await handleReputationEvent(this.env.DB, decoded, ts);
+            break;
           case "ArbiterCouncil":
-            // Wired in Task 6.
+            await handleArbiterEvent(this.env.DB, decoded, ts);
             break;
         }
       }
