@@ -1,6 +1,13 @@
 -- Phase 2A initial schema. Indexer rebuilds D1 entirely from chain state
 -- if dropped, so this migration is the single source of truth for the
 -- read-side schema.
+--
+-- Re-org rollback is only wired up for `bounties` + `bounty_history` (which
+-- carry block_number). `claim_commitments`, `attestations`, `arbiter_votes`,
+-- `arbiter_decisions`, `agent_reputation`, `discovered_agents_apify`, and
+-- `mcp_session_log` are append-only by event log here and lack the column
+-- needed for selective rollback. Phase 2B adds block_number to the ones
+-- that actually re-org under our usage.
 
 CREATE TABLE IF NOT EXISTS index_cursor (
   chain_id INTEGER PRIMARY KEY,

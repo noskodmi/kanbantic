@@ -11,8 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "deploy": "wrangler deploy",
-    "migrate:local": "wrangler d1 execute kanbantic-indexer --local --file migrations/0001_initial.sql",
-    "migrate:remote": "wrangler d1 execute kanbantic-indexer --remote --file migrations/0001_initial.sql"
+    "migrate:local": "for f in migrations/*.sql; do wrangler d1 execute kanbantic-indexer --local --file \"$f\" || exit 1; done",
+    "migrate:remote": "for f in migrations/*.sql; do wrangler d1 execute kanbantic-indexer --remote --file \"$f\" || exit 1; done"
   },
   "dependencies": {
     "@kanbantic/shared": "workspace:*",

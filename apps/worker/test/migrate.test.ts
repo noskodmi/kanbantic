@@ -32,7 +32,7 @@ describe("applyMigrations", () => {
     }
   });
 
-  it("is idempotent — running twice produces identical state", async () => {
+  it("is idempotent — running multiple times produces identical state", async () => {
     await applyMigrations(env.DB);
     await applyMigrations(env.DB);
 

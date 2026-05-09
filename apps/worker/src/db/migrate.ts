@@ -5,6 +5,10 @@ const MIGRATIONS = [{ filename: "0001_initial.sql", sql: migration0001 }] as con
 /**
  * Apply all pending migrations idempotently. Tracks applied filenames in
  * the `_migrations` table.
+ *
+ * Crash-mid-migration is safe because every CREATE in the schema uses
+ * `IF NOT EXISTS`. The filename is recorded only after all statements
+ * succeed, so a partial run replays cleanly on the next call.
  */
 export async function applyMigrations(db: D1Database): Promise<void> {
   await db
