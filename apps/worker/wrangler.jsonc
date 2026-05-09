@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kanbantic-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  }
+  // Phase 2 will add:
+  // - "d1_databases" binding for the indexer
+  // - "durable_objects" binding for the indexer cursor
+  // - "kv_namespaces" if needed
+  // - "vars" for chain RPC URLs and Sourcify endpoint
+}
