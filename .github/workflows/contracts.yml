@@ -5,12 +5,21 @@ on:
     branches: [main]
     paths:
       - "packages/contracts/**"
+      - ".gitmodules"
       - ".github/workflows/contracts.yml"
   pull_request:
     branches: [main]
     paths:
       - "packages/contracts/**"
+      - ".gitmodules"
       - ".github/workflows/contracts.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   forge:
