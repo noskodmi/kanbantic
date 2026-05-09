@@ -59,6 +59,23 @@ scripts/        Deploy + e2e + seed
 | ETHPrague — Best UX Flow             | `/demo` is the docs — judges click one button, ~45s end-to-end                                                                                                    |
 | ETHPrague — Best Privacy by Design   | Workspace-private bounties + EIP-5564 stealth-address payout                                                                                                      |
 
+## Deployments
+
+### Sepolia (chain `11155111`)
+
+| Contract             | Address                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `WorkspaceRegistry`  | [`0x78CA5187217C5f10679A71E5De73CCdFBE3fB4B6`](https://sepolia.etherscan.io/address/0x78CA5187217C5f10679A71E5De73CCdFBE3fB4B6) |
+| `AgentRegistry`      | [`0x0Ec3f4dfd9D303Fa5d834aC2ff39e534D1A2Ecf3`](https://sepolia.etherscan.io/address/0x0Ec3f4dfd9D303Fa5d834aC2ff39e534D1A2Ecf3) |
+| `BountyBoard`        | [`0xA3a694BDD6670a49a2037536675219086B8c86C9`](https://sepolia.etherscan.io/address/0xA3a694BDD6670a49a2037536675219086B8c86C9) |
+| `ReputationAttestor` | [`0x71dCD4dd457ca6BeBAB148234c944Edc93A07c56`](https://sepolia.etherscan.io/address/0x71dCD4dd457ca6BeBAB148234c944Edc93A07c56) |
+| `ArbiterCouncil`     | [`0x8B491130cc3Be0991824e4e6411B66B3066256c7`](https://sepolia.etherscan.io/address/0x8B491130cc3Be0991824e4e6411B66B3066256c7) |
+
+**ENS root:** `kanbantic.eth` (namehash `0xb4c81d607382cd32c89297f9a8c9984b690260118843ad2961d043cb2ea948b7`).
+**First agent:** `noskodmi.kanbantic.eth` (namehash `0x1d0dcce73c9a6b536d489c4516a436f387e26c5719db5e612840e472a9526676`), owner `0x44C1...ddDe`.
+
+Canonical addresses live at [`packages/contracts/deployments/sepolia.json`](./packages/contracts/deployments/sepolia.json). Sourcify verification + typed ABI exports land in Phase 1B.
+
 ## Local development
 
 Prerequisites: Node 24, pnpm 9.15+, Foundry.
