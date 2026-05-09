@@ -126,41 +126,65 @@ contract BountyBoard is IBountyBoard, ReentrancyGuard {
     }
 
     /// @inheritdoc IBountyBoard
-    function commitClaim(
-        uint256,
-        /*bountyId*/
-        bytes32 /*commitment*/
-    )
-        external
-        pure
-    {
-        revert("not yet implemented - Task 7"); // placeholder, replaced in Task 7
+    function commitClaim(uint256 bountyId, bytes32 commitment) external {
+        Bounty storage b = _bounties[bountyId];
+        if (b.claimWindowBlocks == 0) revert WrongClaimMode(bountyId);
+        if (b.status != Status.ClaimWindowOpen) revert BadStatus(bountyId);
+        if (block.number >= b.claimWindowStartBlock + b.claimWindowBlocks) {
+            revert ClaimWindowClosed(bountyId);
+        }
+
+        if (_commitments[bountyId][msg.sender] == bytes32(0)) {
+            _committers[bountyId].push(msg.sender);
+        }
+        _commitments[bountyId][msg.sender] = commitment;
+        emit BountyClaimCommitted(bountyId, msg.sender, commitment);
     }
 
     /// @inheritdoc IBountyBoard
     function finalizeFairClaim(
-        uint256, /*bountyId*/
-        bytes32, /*ctrngDraw*/
+        uint256 bountyId,
+        bytes32 ctrngDraw,
         bytes calldata /*orbitportSig*/
     )
         external
-        pure
     {
-        revert("not yet implemented - Task 7");
+        if (msg.sender != orbitportOracle) revert NotOrbitportOracle(msg.sender);
+
+        Bounty storage b = _bounties[bountyId];
+        if (b.status != Status.ClaimWindowOpen) revert BadStatus(bountyId);
+        if (block.number < b.claimWindowStartBlock + b.claimWindowBlocks) {
+            revert ClaimWindowOpen(bountyId);
+        }
+
+        address[] storage committers = _committers[bountyId];
+        if (committers.length == 0) revert NoCommitters(bountyId);
+
+        uint256 closeBlock = uint256(b.claimWindowStartBlock + b.claimWindowBlocks - 1);
+        uint256 entropy = uint256(
+            keccak256(abi.encodePacked(ctrngDraw, blockhash(closeBlock), block.prevrandao))
+        );
+        address pickedAddress = committers[entropy % committers.length];
+
+        _picked[bountyId] = pickedAddress;
+        b.status = Status.ClaimWindowClosed;
+        emit BountyClaimFinalized(bountyId, pickedAddress, ctrngDraw);
     }
 
     /// @inheritdoc IBountyBoard
-    function revealClaim(
-        uint256,
-        /*bountyId*/
-        bytes32,
-        /*nonce*/
-        bytes32 /*agentNode*/
-    )
-        external
-        pure
-    {
-        revert("not yet implemented - Task 7");
+    function revealClaim(uint256 bountyId, bytes32 nonce, bytes32 agentNode) external {
+        Bounty storage b = _bounties[bountyId];
+        if (b.status != Status.ClaimWindowClosed) revert BadStatus(bountyId);
+        if (msg.sender != _picked[bountyId]) revert NotPickedClaimant(msg.sender);
+        if (agentNode == bytes32(0)) revert ZeroAgentNode();
+        if (_commitments[bountyId][msg.sender] != keccak256(abi.encodePacked(msg.sender, nonce))) {
+            revert CommitmentMismatch();
+        }
+
+        b.status = Status.Claimed;
+        b.claimerNode = agentNode;
+        _lastClaimer[bountyId] = msg.sender;
+        emit BountyClaimed(bountyId, agentNode, msg.sender);
     }
 
     /// @inheritdoc IBountyBoard
