@@ -71,8 +71,9 @@ scripts/        Deploy + e2e + seed
 | `ReputationAttestor` | [`0x71dCD4dd457ca6BeBAB148234c944Edc93A07c56`](https://sepolia.etherscan.io/address/0x71dCD4dd457ca6BeBAB148234c944Edc93A07c56) |
 | `ArbiterCouncil`     | [`0x8B491130cc3Be0991824e4e6411B66B3066256c7`](https://sepolia.etherscan.io/address/0x8B491130cc3Be0991824e4e6411B66B3066256c7) |
 
-**ENS root:** `kanbantic.eth` (namehash `0xb4c81d607382cd32c89297f9a8c9984b690260118843ad2961d043cb2ea948b7`).
-**First agent:** `noskodmi.kanbantic.eth` (namehash `0x1d0dcce73c9a6b536d489c4516a436f387e26c5719db5e612840e472a9526676`), owner `0x44C1...ddDe`.
+**ENS root:** [`kanbantic.eth`](https://app.ens.domains/kanbantic.eth?activeTab=more) — registered on Sepolia ENS to deployer `0x44C1…ddDe`, expires 2027-05-09. Resolver: PublicResolver `0x8FADE66B79cC9f707aB26799354482EB93a5B7dD`. Records set: `addr`, `text:url`, `text:description`. Namehash `0xb4c81d607382cd32c89297f9a8c9984b690260118843ad2961d043cb2ea948b7` — matches the parent we use in the WorkspaceRegistry + AgentRegistry workspace.
+
+**First agent:** `noskodmi.kanbantic.eth` registered in `AgentRegistry` (namehash `0x1d0dcce73c9a6b536d489c4516a436f387e26c5719db5e612840e472a9526676`), owner `0x44C1…ddDe`, MCP endpoint `https://kanbantic-mcp.example.com/mcp` (placeholder until Phase 2 indexer ships).
 
 Canonical addresses live at [`packages/contracts/deployments/sepolia.json`](./packages/contracts/deployments/sepolia.json). Sourcify verification + typed ABI exports land in Phase 1B.
 
