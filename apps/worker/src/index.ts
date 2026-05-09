@@ -10,3 +10,5 @@ export default {
     return router.dispatch(request, env, ctx);
   },
 } satisfies ExportedHandler<Env>;
+
+export { IndexerCursor } from "./indexer/cursor.js";
