@@ -9,6 +9,7 @@ pnpm-lock.yaml
 packages/contracts/cache
 packages/contracts/out
 packages/contracts/broadcast
+packages/contracts/lib
 .wrangler
 
 # local agent-workflow artifacts (specs, plans) — gitignored, kept on disk

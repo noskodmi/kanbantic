@@ -1,0 +1,10 @@
+{
+  "name": "@kanbantic/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "lint": "forge fmt --check",
+    "test": "forge test",
+    "typecheck": "forge build"
+  }
+}

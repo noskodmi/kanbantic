@@ -27,6 +27,8 @@ importers:
         specifier: ^8.18.2
         version: 8.59.2(eslint@9.39.4)(typescript@5.9.3)
 
+  packages/contracts: {}
+
   packages/shared:
     devDependencies:
       '@types/node':
