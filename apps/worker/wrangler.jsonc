@@ -23,10 +23,7 @@
     {
       "binding": "DB",
       "database_name": "kanbantic-indexer",
-      // TODO(phase-2a-deploy): replace with the real id from
-      // `wrangler d1 create kanbantic-indexer` before `wrangler deploy`.
-      // The placeholder is fine for vitest-pool-workers (uses a fresh local D1).
-      "database_id": "00000000-0000-0000-0000-000000000000"
+      "database_id": "e2bd2f85-bbea-45e0-a847-fc21d40e9477"
     }
   ],
   "durable_objects": {
