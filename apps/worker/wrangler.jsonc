@@ -6,10 +6,38 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true
-  }
-  // Phase 2 will add:
-  // - "d1_databases" binding for the indexer
-  // - "durable_objects" binding for the indexer cursor
-  // - "kv_namespaces" if needed
-  // - "vars" for chain RPC URLs and Sourcify endpoint
+  },
+  "rules": [
+    {
+      "type": "Text",
+      "globs": ["**/*.sql"],
+      "fallthrough": true
+    }
+  ],
+  "vars": {
+    "SEPOLIA_RPC": "https://ethereum-sepolia-rpc.publicnode.com",
+    "SEPOLIA_CHAIN_ID": "11155111",
+    "INDEXER_CHUNK_BLOCKS": "9500"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kanbantic-indexer",
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "INDEXER",
+        "class_name": "IndexerCursor"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["IndexerCursor"]
+    }
+  ]
 }
