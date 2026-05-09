@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+@theme {
+  --color-kanbantic-fg: hsl(220 10% 98%);
+  --color-kanbantic-bg: hsl(220 25% 8%);
+  --color-kanbantic-accent: hsl(265 90% 70%);
+  --color-kanbantic-muted: hsl(220 10% 60%);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
