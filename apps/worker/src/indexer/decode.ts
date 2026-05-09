@@ -62,7 +62,12 @@ export function decode(log: EvmLog): DecodedLog | null {
       txHash: log.transactionHash,
       logIndex: Number.parseInt(log.logIndex, 16),
     };
-  } catch {
+  } catch (err) {
+    console.warn("indexer: decode failed", {
+      address: log.address,
+      topic0: log.topics[0],
+      err,
+    });
     return null;
   }
 }

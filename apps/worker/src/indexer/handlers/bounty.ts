@@ -123,6 +123,11 @@ export async function handleBountyEvent(
     }
 
     case "BountyRejected": {
+      // Note: the on-chain reject() no-arbiter path emits both BountyRejected
+      // and BountySettled(refunded=true) in the same tx, so bounty_history will
+      // record a transient "Disputed" row that the contract never actually
+      // entered. End-state is still correct (Refunded). Phase 2B can collapse
+      // the dual-emit case if dashboards need a clean audit log.
       const from = await currentStatus(db, bountyId);
       await db
         .prepare("UPDATE bounties SET status = 'Disputed' WHERE id = ?")
