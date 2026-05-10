@@ -26,8 +26,9 @@ describe("sepoliaDeployment", () => {
     expect(sepoliaDeployment.contracts.AgentVenture).toMatch(/^0x[0-9a-fA-F]{40}$/);
   });
 
-  it("has an OffchainResolver entry (zero-address placeholder until controller deploys it)", () => {
-    expect(sepoliaDeployment.contracts.OffchainResolver).toBe(UNDEPLOYED_PLACEHOLDER);
+  it("has an OffchainResolver entry (deployed + Sourcify-verified on Sepolia)", () => {
+    expect(sepoliaDeployment.contracts.OffchainResolver).not.toBe(UNDEPLOYED_PLACEHOLDER);
+    expect(sepoliaDeployment.contracts.OffchainResolver).toMatch(/^0x[0-9a-fA-F]{40}$/);
   });
 
   it("UNDEPLOYED_PLACEHOLDER is the zero address", () => {
@@ -49,8 +50,8 @@ describe("sepoliaDeployment", () => {
 });
 
 describe("isOffchainResolverDeployed", () => {
-  it("is false while OffchainResolver address is the zero placeholder", () => {
-    expect(isOffchainResolverDeployed).toBe(false);
+  it("is true now that the contract is live on Sepolia", () => {
+    expect(isOffchainResolverDeployed).toBe(true);
   });
 });
 
