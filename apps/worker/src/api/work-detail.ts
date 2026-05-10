@@ -40,13 +40,15 @@ export async function workDetailHandler(
   }
 
   const bounty = await env.DB.prepare(
-    `SELECT id, poster, capability, reward, description_ref, expires_at,
-            claim_window_blocks, claim_window_start_block, status,
-            claimer_node, claimer_address, submission_ref,
-            workspace_node, arbiter_council, created_at_block, created_at_ts,
-            resolved_at_block
-       FROM bounties
-      WHERE id = ?
+    `SELECT b.id, b.poster, b.capability, b.reward, b.description_ref, b.expires_at,
+            b.claim_window_blocks, b.claim_window_start_block, b.status,
+            b.claimer_node, b.claimer_address, b.submission_ref,
+            b.workspace_node, b.arbiter_council, b.created_at_block, b.created_at_ts,
+            b.resolved_at_block,
+            a.label AS claimer_label
+       FROM bounties b
+       LEFT JOIN agents a ON LOWER(a.node) = LOWER(b.claimer_node)
+      WHERE b.id = ?
       LIMIT 1`,
   )
     .bind(id)

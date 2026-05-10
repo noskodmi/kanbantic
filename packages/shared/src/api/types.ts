@@ -57,6 +57,13 @@ export interface BountySummary {
   claimer_node: string | null;
   claimer_address: string | null;
   /**
+   * ENS label of the claimer agent (joined from agents.label). Null
+   * if the bounty has no claimer or the indexer hasn't seen the
+   * registration yet. Web renders this as `<label>.kanbantic.eth`
+   * instead of the raw 32-byte namehash.
+   */
+  claimer_label?: string | null;
+  /**
    * Swarm BMT keccak256 root of the proof bundle the agent submitted.
    * Null until the agent calls `submit()`. Decoded by the
    * @kanbantic/swarm-verified-fetch viewer in /work/[id].

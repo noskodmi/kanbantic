@@ -50,14 +50,16 @@ export async function workHandler(request: Request, env: Env): Promise<Response>
   applyWorkspaceAcl(wb, session?.address);
 
   const sql =
-    `SELECT id, poster, capability, reward, description_ref, expires_at,
-            claim_window_blocks, claim_window_start_block, status,
-            claimer_node, claimer_address,
-            workspace_node, arbiter_council, created_at_block, created_at_ts,
-            resolved_at_block
-       FROM bounties` +
+    `SELECT b.id, b.poster, b.capability, b.reward, b.description_ref, b.expires_at,
+            b.claim_window_blocks, b.claim_window_start_block, b.status,
+            b.claimer_node, b.claimer_address, b.submission_ref,
+            b.workspace_node, b.arbiter_council, b.created_at_block, b.created_at_ts,
+            b.resolved_at_block,
+            a.label AS claimer_label
+       FROM bounties b
+       LEFT JOIN agents a ON LOWER(a.node) = LOWER(b.claimer_node)` +
     wb.whereSql() +
-    ` ORDER BY created_at_block DESC
+    ` ORDER BY b.created_at_block DESC
        LIMIT ?`;
 
   const result = await env.DB.prepare(sql)

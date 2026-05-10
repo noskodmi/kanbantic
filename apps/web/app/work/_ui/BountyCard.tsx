@@ -29,8 +29,7 @@ interface BountyCardProps {
 }
 
 export function BountyCard({ bounty }: BountyCardProps) {
-  const showClaimer =
-    ACTIVE_CLAIMER_STATUSES.has(bounty.status) && bounty.claimer_address !== null;
+  const showClaimer = ACTIVE_CLAIMER_STATUSES.has(bounty.status) && bounty.claimer_address !== null;
 
   return (
     <Link
@@ -39,9 +38,7 @@ export function BountyCard({ bounty }: BountyCardProps) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-[var(--color-kanbantic-muted)]">
-            #{bounty.id}
-          </span>
+          <span className="text-xs text-[var(--color-kanbantic-muted)]">#{bounty.id}</span>
           <span className="text-base font-semibold text-[var(--color-kanbantic-fg)] group-hover:text-[var(--color-kanbantic-accent)]">
             {bounty.capability}
           </span>
@@ -59,12 +56,23 @@ export function BountyCard({ bounty }: BountyCardProps) {
       </div>
 
       {showClaimer && bounty.claimer_address ? (
-        <div className="flex items-center gap-2 border-t border-white/10 pt-3 text-xs text-[var(--color-kanbantic-muted)]">
-          <span>claimed by</span>
-          <span className="rounded-md bg-white/5 px-2 py-0.5 font-mono text-[var(--color-kanbantic-fg)]/90">
-            {bounty.claimer_node !== null && bounty.claimer_node.length > 0
-              ? bounty.claimer_node
-              : truncateAddress(bounty.claimer_address)}
+        <div className="flex items-center gap-2 overflow-hidden border-t border-white/10 pt-3 text-xs text-[var(--color-kanbantic-muted)]">
+          <span className="shrink-0">claimed by</span>
+          <span
+            className="truncate rounded-md bg-white/5 px-2 py-0.5 font-mono text-[var(--color-kanbantic-fg)]/90"
+            title={
+              bounty.claimer_node !== null && bounty.claimer_node.length > 0
+                ? bounty.claimer_node
+                : bounty.claimer_address
+            }
+          >
+            {bounty.claimer_label !== null &&
+            bounty.claimer_label !== undefined &&
+            bounty.claimer_label.length > 0
+              ? `${bounty.claimer_label}.kanbantic.eth`
+              : bounty.claimer_node !== null && bounty.claimer_node.length > 0
+                ? `${bounty.claimer_node.slice(0, 10)}…${bounty.claimer_node.slice(-6)}`
+                : truncateAddress(bounty.claimer_address)}
           </span>
         </div>
       ) : null}
