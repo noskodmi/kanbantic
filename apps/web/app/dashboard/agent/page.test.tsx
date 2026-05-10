@@ -196,19 +196,11 @@ describe("/dashboard/agent", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: /mint agentventure erc-721 first/i }),
     ).toBeInTheDocument();
-    // Pre-deploy the contract address is the zero-address sentinel; the
-    // mint button is rendered but disabled with the documented tooltip.
+    // AgentVenture is now deployed + Sourcify-verified on Sepolia; mint button
+    // is enabled and clicking it triggers writeContract.
     const mintButton = screen.getByRole("button", { name: /mint agentventure/i });
-    expect(mintButton).toBeDisabled();
-    expect(mintButton).toHaveAttribute(
-      "title",
-      "Contract not yet deployed to Sepolia — coming in next deploy",
-    );
-    expect(
-      screen.getByText(/contract not yet deployed to sepolia — coming in next deploy/i),
-    ).toBeInTheDocument();
-    // Clicking a disabled button is a no-op — verify writeContract isn't invoked.
+    expect(mintButton).not.toBeDisabled();
     fireEvent.click(mintButton);
-    expect(mockWriteContract).not.toHaveBeenCalled();
+    expect(mockWriteContract).toHaveBeenCalled();
   });
 });

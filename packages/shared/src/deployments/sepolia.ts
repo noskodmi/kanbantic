@@ -24,10 +24,8 @@ export const sepoliaDeployment = {
     BountyBoard: "0xA3a694BDD6670a49a2037536675219086B8c86C9" as Address,
     ReputationAttestor: "0x71dCD4dd457ca6BeBAB148234c944Edc93A07c56" as Address,
     ArbiterCouncil: "0x8B491130cc3Be0991824e4e6411B66B3066256c7" as Address,
-    // Phase 7 / Sponsor 3 (Umia). Deployed after merge by the controller;
-    // until then the address is the zero-address sentinel and the web UI
-    // disables the mint CTA.
-    AgentVenture: UNDEPLOYED_PLACEHOLDER,
+    // Phase 7 / Sponsor 3 (Umia). Deployed + Sourcify-verified post-merge.
+    AgentVenture: "0xFFE5Df1539AE16E81A11037b15c89061Ff183d6E" as Address,
   },
   ens: {
     rootName: "kanbantic.eth",

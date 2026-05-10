@@ -69,7 +69,7 @@ describe("contract write helpers", () => {
     expect(helper.hash).toBeUndefined();
   });
 
-  it("isAgentVentureDeployed is a boolean (false until controller deploys)", () => {
-    expect(typeof isAgentVentureDeployed).toBe("boolean");
+  it("isAgentVentureDeployed is true now that the contract is live on Sepolia", () => {
+    expect(isAgentVentureDeployed).toBe(true);
   });
 });

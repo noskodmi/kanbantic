@@ -16,8 +16,9 @@ describe("sepoliaDeployment", () => {
     expect(c.ArbiterCouncil).toMatch(/^0x[0-9a-fA-F]{40}$/);
   });
 
-  it("has an AgentVenture entry (zero-address placeholder until controller deploys it)", () => {
-    expect(sepoliaDeployment.contracts.AgentVenture).toBe(UNDEPLOYED_PLACEHOLDER);
+  it("has an AgentVenture entry (deployed + Sourcify-verified on Sepolia)", () => {
+    expect(sepoliaDeployment.contracts.AgentVenture).not.toBe(UNDEPLOYED_PLACEHOLDER);
+    expect(sepoliaDeployment.contracts.AgentVenture).toMatch(/^0x[0-9a-fA-F]{40}$/);
   });
 
   it("UNDEPLOYED_PLACEHOLDER is the zero address", () => {
