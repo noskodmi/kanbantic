@@ -11,15 +11,17 @@ import {
 } from "./index.js";
 
 /**
- * Hand-derived BMT keccak256 root for an empty payload.
+ * Canonical BMT chunk address for an empty payload.
  *
  * Per Swarm's chunk-addressing scheme:
- *   span = 8 zero bytes (length 0, little-endian)
- *   data = 4096 zero bytes (zero-padded chunk)
- *   chunk_id = keccak256(span || data) = keccak256(8 + 4096 = 4104 zero bytes)
+ *   span        = 8 zero bytes (length 0, little-endian)
+ *   padded_data = 4096 zero bytes
+ *   bmt_root    = BMT(padded_data) — 7 levels of pairwise keccak256 over
+ *                 128 segments of 32 zero bytes
+ *   chunk_id    = keccak256(span || bmt_root)
  *
- * This value matches the chunk hash for the empty file as documented by the
- * Swarm reference implementation and `@ethersphere/bee-js`.
+ * This value matches the chunk hash for the empty file as produced by the
+ * Swarm reference implementation and `@ethersphere/bee-js` v8.x.
  */
 const EMPTY_BMT_ROOT_HEX = "b34ca8c22b9e982354f9c7f50b470d66db428d880c8a904d5fe4ec9713171526";
 
