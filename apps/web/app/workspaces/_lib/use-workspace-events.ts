@@ -1,87 +1,77 @@
 "use client";
 
 /**
- * React-Query backed hooks for sourcing workspace data from on-chain
- * event history. We don't have a worker `/api/workspaces` endpoint
- * yet — that ships in Phase 2B — so the browse + detail surfaces
- * read events directly via wagmi's `usePublicClient().getLogs()`.
+ * React-Query backed hooks for workspace data.
  *
- * Two read hooks plus two view-fn reads:
- *
- *   useWorkspaceList()                 → all `WorkspaceCreated` events.
- *   useWorkspaceMembers(wsNode)        → `MemberAdded` minus
- *                                        `MemberRemoved` for one ws.
+ *   useWorkspaceList()                 → indexed `WorkspaceCreated` rows
+ *                                        from the worker (`/api/workspaces`).
+ *                                        We can't `getLogs` from genesis
+ *                                        in the browser anymore — Alchemy
+ *                                        free tier rejects ranges > 10 blocks.
+ *   useWorkspaceMembers(wsNode)        → `membersOf(wsNode)` view call.
+ *                                        Also returns the admin (creator),
+ *                                        unlike the historical event replay
+ *                                        which dropped them silently.
  *   useWorkspaceAdmin(wsNode)          → `adminOf(wsNode)` view.
  *   useWorkspaceExists(wsNode)         → `exists(wsNode)` view.
  *
- * All four poll every 15s by default so a freshly-confirmed tx
- * surfaces within ~1 block. Callers can manually invalidate via the
- * `queryClient` when a write transaction confirms.
+ * All four poll every 15s by default. Callers can manually invalidate
+ * via the `queryClient` when a write transaction confirms.
  */
 
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { sepoliaDeployment, WorkspaceRegistryAbi } from "@kanbantic/shared";
 import type { Address, Hex } from "viem";
-import { parseAbiItem } from "viem";
 import { usePublicClient } from "wagmi";
 
+import { API_BASE } from "../../_lib/api.js";
 import { buildLabelMap } from "./label-cache.js";
 import type { WorkspaceMemberSet, WorkspaceRow } from "./types.js";
 
 const WORKSPACE_REGISTRY_ADDRESS = sepoliaDeployment.contracts.WorkspaceRegistry;
 
-/**
- * Lower-bound block for `getLogs`. Sepolia has hundreds of millions
- * of blocks; scanning from genesis is wasteful. The contract was
- * deployed in Phase 1A — pick a generous floor that's a few weeks
- * before the deploy. Adjust if the deploy block changes.
- */
-const FROM_BLOCK = 0n;
-
 /** Cached for 15s; refetched on window focus (default). */
 const STALE_MS = 15_000;
 
-/**
- * Re-parsed event signatures with `parseAbiItem` so the resulting
- * objects are typed as concrete `AbiEvent` literals. Using
- * `WorkspaceRegistryAbi.find(...)` returns `AbiEvent | undefined`,
- * which viem's `getLogs` rejects (the event type is required to
- * decode the log args).
- */
-const WORKSPACE_CREATED_EVENT = parseAbiItem(
-  "event WorkspaceCreated(bytes32 indexed wsNode, bytes32 indexed parentNode, address indexed admin)",
-);
-export function useWorkspaceList(): UseQueryResult<readonly WorkspaceRow[]> {
-  const publicClient = usePublicClient();
+interface WorkspaceApiRow {
+  node: string;
+  parent: string;
+  admin: string;
+  created_at_block: number;
+  created_at_ts: number;
+}
 
+interface WorkspaceListResponse {
+  workspaces: WorkspaceApiRow[];
+  limit: number;
+}
+
+export function useWorkspaceList(): UseQueryResult<readonly WorkspaceRow[]> {
   return useQuery<readonly WorkspaceRow[]>({
     queryKey: ["workspaces", "list"],
     queryFn: async (): Promise<readonly WorkspaceRow[]> => {
-      if (publicClient === undefined) return [];
-      const logs = await publicClient.getLogs({
-        address: WORKSPACE_REGISTRY_ADDRESS,
-        event: WORKSPACE_CREATED_EVENT,
-        fromBlock: FROM_BLOCK,
-        toBlock: "latest",
+      const res = await fetch(`${API_BASE}/api/workspaces?limit=200`, {
+        headers: { accept: "application/json" },
+        cache: "no-store",
       });
+      if (!res.ok) {
+        throw new Error(`/api/workspaces → ${String(res.status)}`);
+      }
+      const body = (await res.json()) as WorkspaceListResponse;
 
-      const rows: WorkspaceRow[] = logs.map((log) => {
-        const wsNode = log.args.wsNode;
-        const admin = log.args.admin;
-        if (wsNode === undefined || admin === undefined) {
-          throw new Error("WorkspaceCreated log missing indexed args");
-        }
-        return {
-          node: wsNode,
-          label: null,
-          admin,
-          createdAtBlock: log.blockNumber,
-          createdTxHash: log.transactionHash,
-        };
-      });
+      const rows: WorkspaceRow[] = body.workspaces.map((row) => ({
+        node: row.node as Hex,
+        label: null,
+        admin: row.admin as Address,
+        createdAtBlock: BigInt(row.created_at_block),
+        createdTxHash: "0x", // tx hash not currently surfaced by the indexer
+      }));
 
       const labels = buildLabelMap(rows.map((r) => r.node));
-      return rows.map((row) => ({ ...row, label: labels[row.node.toLowerCase()] ?? null }));
+      return rows.map((row) => ({
+        ...row,
+        label: labels[row.node.toLowerCase()] ?? null,
+      }));
     },
     staleTime: STALE_MS,
     refetchInterval: STALE_MS,
@@ -108,12 +98,12 @@ export function useWorkspaceMembers(wsNode: Hex | null): UseQueryResult<Workspac
     queryFn: async (): Promise<WorkspaceMemberSet> => {
       if (publicClient === undefined || wsNode === null) return { members: [] };
 
-      const members = (await publicClient.readContract({
+      const members = await publicClient.readContract({
         address: WORKSPACE_REGISTRY_ADDRESS,
         abi: WorkspaceRegistryAbi,
         functionName: "membersOf",
         args: [wsNode],
-      }));
+      });
 
       return { members: [...members] };
     },

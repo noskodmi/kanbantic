@@ -11,6 +11,7 @@ import {
   contractIntelligenceListHandler,
 } from "./api/contract-intelligence.js";
 import { discoveredHandler, discoveredSuggestHandler } from "./api/discovered.js";
+import { workspacesListHandler } from "./api/workspaces.js";
 import { mcpHandler } from "./api/mcp.js";
 import { orbitportLastDrawHandler, orbitportLiveDrawHandler } from "./api/orbitport.js";
 import { refreshHandler } from "./api/refresh.js";
@@ -65,6 +66,7 @@ router.add({ method: "GET", path: "/api/agents/:node", handler: agentDetailHandl
 router.add({ method: "GET", path: "/api/work", handler: workHandler });
 router.add({ method: "GET", path: "/api/work/:id", handler: workDetailHandler });
 router.add({ method: "GET", path: "/api/discovered", handler: discoveredHandler });
+router.add({ method: "GET", path: "/api/workspaces", handler: workspacesListHandler });
 router.add({
   method: "POST",
   path: "/api/discovered/suggest",

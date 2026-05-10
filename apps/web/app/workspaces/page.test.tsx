@@ -71,13 +71,45 @@ function mockBounty(overrides: Partial<BountySummary>): BountySummary {
   };
 }
 
-function mockFetchBounties(payload: BountyListResponse): void {
-  globalThis.fetch = vi.fn().mockResolvedValue(
-    new Response(JSON.stringify(payload), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    }),
-  ) as typeof fetch;
+interface WorkspacesApiPayload {
+  workspaces: {
+    node: string;
+    parent: string;
+    admin: string;
+    created_at_block: number;
+    created_at_ts: number;
+  }[];
+  limit: number;
+}
+
+function jsonRes(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+/**
+ * Routes mocked fetches by URL: /api/workspaces returns the workspace
+ * list, every other URL returns the bounty list. Lets a single
+ * `globalThis.fetch` handle both endpoints the page now hits.
+ */
+function mockFetchBounties(
+  bounties: BountyListResponse,
+  workspaces: WorkspacesApiPayload = { workspaces: [], limit: 200 },
+): void {
+  globalThis.fetch = vi.fn((input: RequestInfo | URL): Promise<Response> => {
+    let url: string;
+    if (typeof input === "string") {
+      url = input;
+    } else if (input instanceof URL) {
+      url = input.href;
+    } else {
+      url = input.url;
+    }
+    if (url.includes("/api/workspaces")) return Promise.resolve(jsonRes(workspaces));
+    return Promise.resolve(jsonRes(bounties));
+  });
 }
 
 function withQueryClient(node: ReactElement): ReactElement {
@@ -113,36 +145,33 @@ describe("/workspaces browse page", () => {
     );
   });
 
-  it("renders one card per WorkspaceCreated event", async () => {
-    mockGetLogs.mockImplementation(({ event }: { event: { name: string } }) => {
-      if (event.name === "WorkspaceCreated") {
-        return Promise.resolve([
+  it("renders one card per workspace returned by /api/workspaces", async () => {
+    mockFetchBounties(
+      { bounties: [mockBounty({ id: "1", workspace_node: NODE_A })], limit: 50 },
+      {
+        workspaces: [
           {
-            args: { wsNode: NODE_A, parentNode: NODE_A, admin: ADMIN },
-            blockNumber: 100n,
-            transactionHash: "0xaaaa",
-            logIndex: 0,
+            node: NODE_A,
+            parent: NODE_A,
+            admin: ADMIN,
+            created_at_block: 100,
+            created_at_ts: Math.floor(Date.now() / 1000) - 600,
           },
           {
-            args: { wsNode: NODE_B, parentNode: NODE_B, admin: ADMIN },
-            blockNumber: 200n,
-            transactionHash: "0xbbbb",
-            logIndex: 0,
+            node: NODE_B,
+            parent: NODE_B,
+            admin: ADMIN,
+            created_at_block: 200,
+            created_at_ts: Math.floor(Date.now() / 1000) - 300,
           },
-        ]);
-      }
-      return Promise.resolve([]);
-    });
-
-    mockFetchBounties({
-      bounties: [mockBounty({ id: "1", workspace_node: NODE_A })],
-      limit: 50,
-    });
+        ],
+        limit: 200,
+      },
+    );
 
     render(withQueryClient(<WorkspacesPage />));
 
     await waitFor(() => {
-      // Two cards rendered — both truncated namehashes are visible.
       expect(screen.getAllByText(/0x111111…111111/i).length).toBeGreaterThan(0);
       expect(screen.getAllByText(/0x222222…222222/i).length).toBeGreaterThan(0);
     });
