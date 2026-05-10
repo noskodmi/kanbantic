@@ -17,6 +17,7 @@
   "dependencies": {
     "@kanbantic/shared": "workspace:*",
     "@kanbantic/sourcify-client": "workspace:*",
+    "@kanbantic/swarm-verified-fetch": "workspace:*",
     "@noble/curves": "^1.6.0",
     "@noble/hashes": "^1.6.0",
     "viem": "^2.21.0"

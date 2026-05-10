@@ -114,6 +114,9 @@ importers:
       '@kanbantic/sourcify-client':
         specifier: workspace:*
         version: link:../../packages/sourcify-client
+      '@kanbantic/swarm-verified-fetch':
+        specifier: workspace:*
+        version: link:../../packages/swarm-verified-fetch
       '@noble/curves':
         specifier: ^1.6.0
         version: 1.9.7

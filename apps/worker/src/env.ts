@@ -37,4 +37,16 @@ export interface Env {
    * sentinel — production must set this via wrangler vars/secrets.
    */
   X402_PAY_TO_ADDRESS?: string;
+  /**
+   * HMAC secret used to sign SIWE session tokens (Phase 2B-A write API).
+   * Provisioned via `wrangler secret put SIWE_HMAC_SECRET`. When unset
+   * the SIWE verify + write endpoints return 503 with setup
+   * instructions instead of issuing/accepting unauthenticated tokens.
+   */
+  SIWE_HMAC_SECRET?: string;
+  /**
+   * Public origin the SIWE message must declare (and which the verify
+   * endpoint pins). Defaults to the production worker URL when unset.
+   */
+  SIWE_DOMAIN?: string;
 }

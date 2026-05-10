@@ -27,7 +27,14 @@
     // pins. Production overrides via `wrangler secret put X402_PAY_TO_ADDRESS`
     // (or by editing this file before deploy) — typically the deployer
     // address `0x44C176989d16f5c2A846CF59d4CF68AF1006ddDe`.
-    "X402_PAY_TO_ADDRESS": "0x000000000000000000000000000000000000bEEF"
+    "X402_PAY_TO_ADDRESS": "0x000000000000000000000000000000000000bEEF",
+    // SIWE auth (Phase 2B-A write API). Domain pinned in the EIP-4361
+    // message; HMAC secret signs the session token returned by
+    // /api/siwe/verify. Production must override the secret via
+    // `wrangler secret put SIWE_HMAC_SECRET` — the dev value here keeps
+    // the test suite green and is intentionally non-secret.
+    "SIWE_DOMAIN": "kanbantic-api.lizzflix.workers.dev",
+    "SIWE_HMAC_SECRET": "test-hmac-secret-do-not-use-in-prod"
   },
   "d1_databases": [
     {

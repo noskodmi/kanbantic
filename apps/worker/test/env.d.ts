@@ -12,6 +12,10 @@ declare module "cloudflare:test" {
     ORBITPORT_TOKEN?: string;
     WORKER_DEPLOYER_PRIVATE_KEY?: string;
     X402_PAY_TO_ADDRESS?: string;
+    SIWE_HMAC_SECRET?: string;
+    SIWE_DOMAIN?: string;
+    OPENROUTER_API_KEY?: string;
+    OPENROUTER_MODEL?: string;
   }
 }
 

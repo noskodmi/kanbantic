@@ -1,6 +1,7 @@
 import { type Address, parseEther } from "viem";
 
 import { agentDetailHandler } from "./api/agent-detail.js";
+import { agentRunHandler } from "./api/agent-run.js";
 import { agentsHandler } from "./api/agents.js";
 import { ccipReadHandler } from "./api/ccip-read.js";
 import { contractIntelligenceHandler } from "./api/contract-intelligence.js";
@@ -8,8 +9,10 @@ import { mcpHandler } from "./api/mcp.js";
 import { orbitportLastDrawHandler } from "./api/orbitport.js";
 import { refreshHandler } from "./api/refresh.js";
 import { statusHandler } from "./api/status.js";
+import { swarmReadHandler, uploadHandler } from "./api/upload.js";
 import { workDetailHandler } from "./api/work-detail.js";
 import { workHandler } from "./api/work.js";
+import { siweNonceHandler, siweVerifyHandler } from "./auth/siwe.js";
 import type { Env } from "./env.js";
 import { Router } from "./router.js";
 import { withX402 } from "./x402/middleware.js";
@@ -77,6 +80,12 @@ router.add({ method: "POST", path: "/mcp", handler: mcpHandler });
 router.add({ method: "POST", path: "/api/mcp", handler: mcpHandler });
 router.add({ method: "OPTIONS", path: "/mcp", handler: mcpHandler });
 router.add({ method: "OPTIONS", path: "/api/mcp", handler: mcpHandler });
+// Phase 2B-A write API: SIWE auth + Swarm upload proxy + agent runner.
+router.add({ method: "POST", path: "/api/siwe/nonce", handler: siweNonceHandler });
+router.add({ method: "POST", path: "/api/siwe/verify", handler: siweVerifyHandler });
+router.add({ method: "POST", path: "/api/upload", handler: uploadHandler });
+router.add({ method: "GET", path: "/api/swarm/:ref", handler: swarmReadHandler });
+router.add({ method: "POST", path: "/api/agent/run", handler: agentRunHandler });
 
 export default {
   async fetch(request, env, ctx) {

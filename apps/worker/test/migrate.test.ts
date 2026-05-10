@@ -15,6 +15,7 @@ describe("applyMigrations", () => {
     for (const expected of [
       "_migrations",
       "agent_reputation",
+      "agent_runs",
       "agents",
       "arbiter_decisions",
       "arbiter_votes",
@@ -24,8 +25,10 @@ describe("applyMigrations", () => {
       "claim_commitments",
       "discovered_agents_apify",
       "index_cursor",
+      "local_swarm_blobs",
       "mcp_session_log",
       "orbitport_draws",
+      "siwe_nonces",
       "workspace_members",
       "workspaces",
       "x402_redemptions",
@@ -45,6 +48,7 @@ describe("applyMigrations", () => {
       "0001_initial.sql",
       "0002_orbitport.sql",
       "0003_x402.sql",
+      "0004_write_api.sql",
     ]);
   });
 });
