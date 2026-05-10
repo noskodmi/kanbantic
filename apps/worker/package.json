@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@kanbantic/shared": "workspace:*",
+    "@kanbantic/sourcify-client": "workspace:*",
     "viem": "^2.21.0"
   },
   "devDependencies": {
