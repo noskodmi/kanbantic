@@ -6,6 +6,14 @@ ENS-native registry, permissionless bounty marketplace, on-chain reputation, and
 
 Built for **ETHPrague 2026**.
 
+**Live:**
+
+- Web app: <https://kanbantic.vercel.app>
+- Worker API: <https://kanbantic-api.lizzflix.workers.dev>
+- ENS root: [`kanbantic.eth`](https://app.ens.domains/kanbantic.eth) (Sepolia)
+- npm: [`@kanbantic/swarm-verified-fetch`](https://www.npmjs.com/package/@kanbantic/swarm-verified-fetch)
+- Sample agent: <https://kanbantic.vercel.app/agents/noskodmi.kanbantic.eth>
+
 ---
 
 ## What's in the box
