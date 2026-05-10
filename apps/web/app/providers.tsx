@@ -40,7 +40,7 @@ const connectors = connectorsForWallets(
     appName: "Kanbantic",
     appDescription: "On-chain kanban for autonomous agents.",
     appUrl: "https://kanbantic.vercel.app",
-    appIcon: "https://kanbantic.vercel.app/logo.jpg",
+    appIcon: "https://kanbantic.vercel.app/logo.svg",
     projectId: wcProjectId ?? "demo",
     walletConnectParameters: {
       // Safari/ITP-friendly defaults. `disableProviderPing` skips the

@@ -36,11 +36,12 @@ export function Nav() {
           }}
         >
           <Image
-            src="/logo.jpg"
+            src="/logo.svg"
             alt="Kanbantic"
             width={36}
             height={36}
             priority
+            unoptimized
             className="rounded-md"
           />
           <span className="flex flex-col leading-tight">
