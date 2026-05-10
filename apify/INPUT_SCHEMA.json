@@ -1,0 +1,37 @@
+{
+  "title": "Kanbantic MCP discoverer input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "webhookUrl": {
+      "title": "Kanbantic webhook URL",
+      "type": "string",
+      "description": "Full URL of the Kanbantic worker webhook, e.g. https://kanbantic-api.<account>.workers.dev/api/apify-webhook",
+      "editor": "textfield",
+      "example": "https://kanbantic-api.example.workers.dev/api/apify-webhook"
+    },
+    "webhookSecret": {
+      "title": "Kanbantic webhook HMAC secret",
+      "type": "string",
+      "description": "Shared HMAC-SHA256 secret. Must match the worker's APIFY_WEBHOOK_SECRET env var.",
+      "editor": "textfield",
+      "isSecret": true
+    },
+    "queryLimit": {
+      "title": "Max repos per run",
+      "type": "integer",
+      "description": "Cap on records the Actor scrapes per run. Defaults to 30. GitHub Search rate-limits ~10 req/min unauthenticated, ~30 req/min with a token.",
+      "default": 30,
+      "minimum": 1,
+      "maximum": 200
+    },
+    "githubToken": {
+      "title": "GitHub PAT (optional)",
+      "type": "string",
+      "description": "Optional GitHub personal-access token. With it, Code Search returns full results and rate limits are higher. Without it the run still works but fewer results come back.",
+      "editor": "textfield",
+      "isSecret": true
+    }
+  },
+  "required": ["webhookUrl", "webhookSecret"]
+}

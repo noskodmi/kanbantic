@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+    "outDir": "dist",
+    "rootDir": "src",
+    "noEmit": false
+  },
+  "include": ["src/**/*"],
+  "exclude": ["src/**/*.test.ts", "node_modules", "dist"]
+}

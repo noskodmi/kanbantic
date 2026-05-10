@@ -139,3 +139,24 @@ export interface OrbitportDrawSummary {
 export interface OrbitportLastDrawResponse {
   last: OrbitportDrawSummary | null;
 }
+
+/**
+ * Apify-discovered repository surfaced via the GitHub-discovery Actor.
+ * Lifecycle: `discovered` (just observed by the Actor) → `claimed`
+ * (its suggested label has been registered on Kanbantic and the row
+ * carries the resulting `claimed_node`) → `rejected` (manual triage).
+ */
+export interface DiscoveredAgentSummary {
+  repo_url: string;
+  mcp_path: string | null;
+  suggested_label: string;
+  status: "discovered" | "claimed" | "rejected";
+  claimed_node: string | null;
+  /** Unix seconds — when the Actor first observed this repo. */
+  discovered_at: number;
+}
+
+export interface DiscoveredAgentsResponse {
+  discovered: DiscoveredAgentSummary[];
+  limit: number;
+}

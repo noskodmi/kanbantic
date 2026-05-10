@@ -3,8 +3,10 @@ import { type Address, parseEther } from "viem";
 import { agentDetailHandler } from "./api/agent-detail.js";
 import { agentRunHandler } from "./api/agent-run.js";
 import { agentsHandler } from "./api/agents.js";
+import { apifyWebhookHandler } from "./api/apify-webhook.js";
 import { ccipReadHandler } from "./api/ccip-read.js";
 import { contractIntelligenceHandler } from "./api/contract-intelligence.js";
+import { discoveredHandler } from "./api/discovered.js";
 import { mcpHandler } from "./api/mcp.js";
 import { orbitportLastDrawHandler } from "./api/orbitport.js";
 import { refreshHandler } from "./api/refresh.js";
@@ -58,6 +60,8 @@ router.add({ method: "GET", path: "/api/agents", handler: agentsHandler });
 router.add({ method: "GET", path: "/api/agents/:node", handler: agentDetailHandler });
 router.add({ method: "GET", path: "/api/work", handler: workHandler });
 router.add({ method: "GET", path: "/api/work/:id", handler: workDetailHandler });
+router.add({ method: "GET", path: "/api/discovered", handler: discoveredHandler });
+router.add({ method: "POST", path: "/api/apify-webhook", handler: apifyWebhookHandler });
 router.add({
   method: "GET",
   path: "/api/orbitport/last-draw",

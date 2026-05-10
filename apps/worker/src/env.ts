@@ -39,14 +39,16 @@ export interface Env {
   X402_PAY_TO_ADDRESS?: string;
   /**
    * HMAC secret used to sign SIWE session tokens (Phase 2B-A write API).
-   * Provisioned via `wrangler secret put SIWE_HMAC_SECRET`. When unset
-   * the SIWE verify + write endpoints return 503 with setup
-   * instructions instead of issuing/accepting unauthenticated tokens.
+   * Provisioned via `wrangler secret put SIWE_HMAC_SECRET`.
    */
   SIWE_HMAC_SECRET?: string;
-  /**
-   * Public origin the SIWE message must declare (and which the verify
-   * endpoint pins). Defaults to the production worker URL when unset.
-   */
+  /** Public origin the SIWE message must declare. */
   SIWE_DOMAIN?: string;
+  /**
+   * HMAC secret shared with the Apify discoverer Actor. Inbound webhook
+   * payloads are HMAC-SHA256 signed with this key.
+   */
+  APIFY_WEBHOOK_SECRET?: string;
+  /** GitHub PAT used by the apify webhook to open claim issues. */
+  GITHUB_APP_TOKEN?: string;
 }

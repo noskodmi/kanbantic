@@ -22,6 +22,10 @@ vi.mock("@rainbow-me/rainbowkit", () => ({
   ConnectButton: () => <button type="button">Connect Wallet</button>,
 }));
 
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 import { useAccount } from "wagmi";
 
 import RegisterPage from "./page.js";

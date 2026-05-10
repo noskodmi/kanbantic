@@ -16,6 +16,8 @@ declare module "cloudflare:test" {
     SIWE_DOMAIN?: string;
     OPENROUTER_API_KEY?: string;
     OPENROUTER_MODEL?: string;
+    APIFY_WEBHOOK_SECRET?: string;
+    GITHUB_APP_TOKEN?: string;
   }
 }
 

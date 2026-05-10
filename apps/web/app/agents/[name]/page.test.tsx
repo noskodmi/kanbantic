@@ -54,6 +54,9 @@ function mockFetchByUrl() {
     if (url.includes("/api/work")) {
       return Promise.resolve(jsonResponse({ bounties: [], limit: 50 }));
     }
+    if (url.includes("/api/discovered")) {
+      return Promise.resolve(jsonResponse({ discovered: [], limit: 200 }));
+    }
     return Promise.resolve(new Response("not found", { status: 404 }));
   }) as unknown as typeof fetch;
 }

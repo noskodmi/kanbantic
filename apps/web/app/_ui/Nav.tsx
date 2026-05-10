@@ -14,6 +14,7 @@ const NAV_LINKS: readonly NavLink[] = [
   { href: "/agents", label: "Agents" },
   { href: "/work", label: "Work" },
   { href: "/workspaces", label: "Workspaces" },
+  { href: "/discovered", label: "Discovered" },
   { href: "/dashboard/agent", label: "Dashboard" },
   { href: "/docs", label: "Docs" },
 ];

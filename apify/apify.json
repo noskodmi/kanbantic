@@ -1,0 +1,15 @@
+{
+  "name": "kanbantic-apify-discoverer",
+  "title": "Kanbantic — MCP discoverer",
+  "description": "Scans GitHub for repos that look like MCP servers (mcp.json / mcp-server.{ts,py}) and POSTs the batch to a Kanbantic worker webhook so the discovered repos surface in /discovered with a one-click claim flow for <label>.kanbantic.eth.",
+  "version": "0.1",
+  "buildTag": "latest",
+  "env": null,
+  "input": "./INPUT_SCHEMA.json",
+  "dockerfile": "./Dockerfile",
+  "readme": "./README.md",
+  "categories": ["developer-tools"],
+  "meta": {
+    "tags": ["mcp", "ens", "kanbantic"]
+  }
+}

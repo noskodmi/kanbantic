@@ -12,7 +12,8 @@
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import Link from "next/link";
-import { useId, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useId, useMemo, useState } from "react";
 import type { SyntheticEvent } from "react";
 import { sepoliaDeployment } from "@kanbantic/shared";
 import { cn } from "@kanbantic/ui";
@@ -110,6 +111,18 @@ function validate(state: FormState): ValidationResult {
 }
 
 export default function RegisterPage() {
+  // useSearchParams forces a Suspense boundary in Next.js when the
+  // surrounding page is otherwise statically generated. Wrapping the
+  // form lets the prefill work without making the whole route opt out
+  // of static rendering.
+  return (
+    <Suspense fallback={null}>
+      <RegisterForm />
+    </Suspense>
+  );
+}
+
+function RegisterForm() {
   const { isConnected } = useAccount();
   const labelId = useId();
   const mcpId = useId();
@@ -117,7 +130,25 @@ export default function RegisterPage() {
   const profileId = useId();
   const stealthId = useId();
 
-  const [state, setState] = useState<FormState>(INITIAL_STATE);
+  const searchParams = useSearchParams();
+  const prefillLabel = searchParams.get("label");
+  const initialLabel =
+    prefillLabel && LABEL_RE.test(prefillLabel.toLowerCase()) ? prefillLabel.toLowerCase() : "";
+
+  const [state, setState] = useState<FormState>({ ...INITIAL_STATE, label: initialLabel });
+
+  // If the user navigates between /discovered links without a full
+  // reload, sync the label input with the new query param. We only
+  // overwrite when the user hasn't already typed something custom,
+  // so we don't clobber edits.
+  useEffect(() => {
+    if (!prefillLabel) return;
+    const next = prefillLabel.toLowerCase();
+    if (!LABEL_RE.test(next)) return;
+    setState((prev) =>
+      prev.label === "" || prev.label === initialLabel ? { ...prev, label: next } : prev,
+    );
+  }, [prefillLabel, initialLabel]);
 
   const { register, isPending, error, hash, reset } = useAgentRegistry();
   const receipt = useWaitForTransactionReceipt({ hash });
