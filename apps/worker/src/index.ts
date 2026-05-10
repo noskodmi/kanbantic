@@ -3,6 +3,7 @@ import { type Address, parseEther } from "viem";
 import { agentsHandler } from "./api/agents.js";
 import { ccipReadHandler } from "./api/ccip-read.js";
 import { contractIntelligenceHandler } from "./api/contract-intelligence.js";
+import { mcpHandler } from "./api/mcp.js";
 import { orbitportLastDrawHandler } from "./api/orbitport.js";
 import { refreshHandler } from "./api/refresh.js";
 import { statusHandler } from "./api/status.js";
@@ -63,6 +64,12 @@ router.add({
 // and POST (`{sender, data}` JSON body) are supported per spec.
 router.add({ method: "GET", path: "/api/ccip-read/:sender/:data", handler: ccipReadHandler });
 router.add({ method: "POST", path: "/api/ccip-read", handler: ccipReadHandler });
+// MCP JSON-RPC server. /mcp is the canonical short path agents register;
+// /api/mcp aliases it for REST-style consistency.
+router.add({ method: "POST", path: "/mcp", handler: mcpHandler });
+router.add({ method: "POST", path: "/api/mcp", handler: mcpHandler });
+router.add({ method: "OPTIONS", path: "/mcp", handler: mcpHandler });
+router.add({ method: "OPTIONS", path: "/api/mcp", handler: mcpHandler });
 
 export default {
   async fetch(request, env, ctx) {

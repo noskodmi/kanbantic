@@ -13,7 +13,7 @@ export type RouteHandler = (
 ) => Promise<Response>;
 
 export interface Route {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "OPTIONS";
   /** Exact path or pattern with `:name` placeholders. */
   path: string;
   handler: RouteHandler;
