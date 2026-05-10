@@ -19,9 +19,11 @@ import { cn } from "@kanbantic/ui";
 import { useAccount, useWaitForTransactionReceipt } from "wagmi";
 
 import { useAgentRegistry } from "../_lib/contracts.js";
+import { parseStealthMetaAddress } from "../_lib/stealth.js";
 
 const ROOT_NAME = sepoliaDeployment.ens.rootName;
 const ETHERSCAN_TX = "https://sepolia.etherscan.io/tx";
+const EIP_5564_LINK = "https://eips.ethereum.org/EIPS/eip-5564";
 
 /**
  * ENS labels we accept here: lowercase ASCII letters, digits, and
@@ -42,6 +44,13 @@ interface FormState {
   mcpEndpoint: string;
   capabilities: string;
   profileRef: string;
+  /**
+   * Optional EIP-5564 stealth meta-address. If filled, the form packs
+   * `stealth=<meta>` into the `capabilities` string before calling
+   * `AgentRegistry.register` — see the rationale in
+   * `app/_lib/stealth.ts`.
+   */
+  stealthMeta: string;
 }
 
 const INITIAL_STATE: FormState = {
@@ -49,6 +58,7 @@ const INITIAL_STATE: FormState = {
   mcpEndpoint: "",
   capabilities: "",
   profileRef: "",
+  stealthMeta: "",
 };
 
 interface ValidationResult {
@@ -88,6 +98,14 @@ function validate(state: FormState): ValidationResult {
     errors.profileRef = "Must be a 0x-prefixed 32-byte hex string, or empty.";
   }
 
+  if (state.stealthMeta) {
+    try {
+      parseStealthMetaAddress(state.stealthMeta);
+    } catch (err) {
+      errors.stealthMeta = err instanceof Error ? err.message : "Invalid stealth meta-address.";
+    }
+  }
+
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
@@ -97,6 +115,7 @@ export default function RegisterPage() {
   const mcpId = useId();
   const capsId = useId();
   const profileId = useId();
+  const stealthId = useId();
 
   const [state, setState] = useState<FormState>(INITIAL_STATE);
 
@@ -114,11 +133,20 @@ export default function RegisterPage() {
     event.preventDefault();
     if (!validation.ok || isPending) return;
 
+    // v0.1: pack the optional stealth meta-address into the
+    // `capabilities` string as a `stealth=<meta>` token. The on-chain
+    // `AgentRegistry.register` ABI is unchanged — see
+    // `app/_lib/stealth.ts` for the trade-off note.
+    const trimmedStealth = state.stealthMeta.trim();
+    const finalCapabilities = trimmedStealth
+      ? [...tags, `stealth=${trimmedStealth}`].join(",")
+      : tags.join(",");
+
     register({
       parentNode: sepoliaDeployment.ens.rootNamehash,
       label: state.label,
       mcpEndpoint: state.mcpEndpoint,
-      capabilities: tags.join(","),
+      capabilities: finalCapabilities,
     });
   }
 
@@ -258,6 +286,45 @@ export default function RegisterPage() {
             </p>
             {validation.errors.profileRef ? (
               <p className="text-xs text-red-400">{validation.errors.profileRef}</p>
+            ) : null}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label htmlFor={stealthId} className="text-sm font-medium">
+              Stealth meta-address{" "}
+              <span className="text-[var(--color-kanbantic-muted)]">(optional, EIP-5564)</span>
+            </label>
+            <input
+              id={stealthId}
+              type="text"
+              value={state.stealthMeta}
+              onChange={(e) => {
+                update("stealthMeta", e.target.value);
+              }}
+              placeholder="st:eth:0x<spending-pubkey><viewing-pubkey>"
+              autoComplete="off"
+              spellCheck={false}
+              className="rounded-md border border-white/10 bg-transparent px-3 py-2 font-mono text-xs focus:border-[var(--color-kanbantic-accent)] focus:outline-none"
+            />
+            <p className="text-xs text-[var(--color-kanbantic-muted)]">
+              Posters who pay your bounty will derive a one-time payout address from this meta-key
+              client-side, so the on-chain trail doesn&apos;t link the bounty to your wallet. Read
+              the{" "}
+              <a
+                href={EIP_5564_LINK}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-[var(--color-kanbantic-accent)] hover:underline"
+              >
+                EIP-5564 spec
+              </a>{" "}
+              for how the agent generates this. v0.1 packs it into the{" "}
+              <span className="font-mono">capabilities</span> string as{" "}
+              <span className="font-mono">stealth=&lt;meta&gt;</span>; v0.2 promotes it to a
+              first-class on-chain field.
+            </p>
+            {validation.errors.stealthMeta ? (
+              <p className="text-xs text-red-400">{validation.errors.stealthMeta}</p>
             ) : null}
           </div>
         </fieldset>

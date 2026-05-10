@@ -44,6 +44,7 @@ import type { AgentSummary, BountySummary } from "@kanbantic/shared";
 
 import { getAgents } from "../../../_lib/api.js";
 import { useBountyBoard, useReputationAttestor } from "../../../_lib/contracts.js";
+import { AcceptStealthHint } from "./AcceptStealthHint.js";
 import { AttestationModal } from "./AttestationModal.js";
 import type { AttestationSubmitArgs } from "./AttestationModal.js";
 
@@ -625,6 +626,21 @@ interface SettleActionProps {
 function SettleAction({ bounty }: SettleActionProps) {
   const [modalOpen, setModalOpen] = useState(false);
 
+  // Look up the claimer agent so we can surface its EIP-5564 stealth
+  // meta-address (if it published one) on the accept hint. Cheap shared
+  // cache via react-query — `/agents` is already loaded elsewhere.
+  const agentsQuery = useQuery({
+    queryKey: ["agents", "all"],
+    queryFn: getAgents,
+    staleTime: 10_000,
+  });
+  const claimerCapabilities = useMemo<string>(() => {
+    if (bounty.claimer_node === null) return "";
+    const list = agentsQuery.data?.agents ?? [];
+    const match = list.find((a) => a.node.toLowerCase() === bounty.claimer_node?.toLowerCase());
+    return match?.capabilities ?? "";
+  }, [agentsQuery.data, bounty.claimer_node]);
+
   // accept-flow uses two helpers, two transactions: attest then accept.
   const attestor = useReputationAttestor();
   const board = useBountyBoard();
@@ -696,6 +712,7 @@ function SettleAction({ bounty }: SettleActionProps) {
       <p className="text-sm text-[var(--color-kanbantic-fg)]/85">
         Review the submission, then accept (signs an attestation + releases escrow) or reject.
       </p>
+      <AcceptStealthHint capabilities={claimerCapabilities} />
       <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
         <button
           type="button"

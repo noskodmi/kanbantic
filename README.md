@@ -59,6 +59,32 @@ scripts/        Deploy + e2e + seed
 | ETHPrague — Best UX Flow             | `/demo` is the docs — judges click one button, ~45s end-to-end                                                                                                    |
 | ETHPrague — Best Privacy by Design   | Workspace-private bounties + EIP-5564 stealth-address payout                                                                                                      |
 
+## Privacy by Design — EIP-5564 stealth payouts
+
+Claimers can opt into a stealth meta-address (`st:eth:0x<spending-pubkey><viewing-pubkey>`); when a poster goes to settle a bounty, the web app derives a one-time payout address client-side per [EIP-5564](https://eips.ethereum.org/EIPS/eip-5564) so the on-chain trail doesn't link the bounty to the claimer's wallet.
+
+- **Library:** [`apps/web/app/_lib/stealth.ts`](./apps/web/app/_lib/stealth.ts) — pure-TS `parseStealthMetaAddress` + `generateStealthAddress` over `@noble/curves` + `@noble/hashes`.
+- **Tests:** [`apps/web/app/_lib/stealth.test.ts`](./apps/web/app/_lib/stealth.test.ts) — 17 unit tests, including a recipient round-trip that recovers the same stealth address from the matching viewing + spending secret keys.
+- **UI:** opt-in field on `/register`; "Privacy by Design · EIP-5564" badge on `/agents/<label>`; derivation hint on `/work/[id]` accept flow.
+
+**v0.1 trade-offs (documented in code):**
+
+1. The on-chain `AgentRegistry` ABI is unchanged; the meta-address rides along inside the existing `capabilities` string as a `stealth=<meta>` token. `extractStealthMeta` parses it back. v0.2 promotes this to a first-class on-chain field.
+2. `BountyBoard.accept(uint256)` does not take a payout-address argument, so the on-chain reward still flows to the claimer's wallet. The cryptographic primitive is shipped + tested today; v0.2 adds either an explicit payout argument or a stealth-aware ERC-5564 hook.
+
+**Reproducible fixture** (re-derive in node):
+
+```ts
+import { secp256k1 } from "@noble/curves/secp256k1";
+import { keccak_256 } from "@noble/hashes/sha3";
+// spending sk = 0x11..11, viewing sk = 0x22..22, ephemeral sk = 0x33..33
+//   meta:           st:eth:0x034f355bdcb7cc0af728ef3cceb9615d90684bb5b2ca5f859ab0f0b704075871aa
+//                          02466d7fcae563e5cb09a0d1870bb580344804617879a14949cf22285f1bae3f27
+//   ephemeral pubkey: 0x023c72addb4fdf09af94f0c94d7fe92a386a7e70cf8a1d85916386bb2535c7b1b1
+//   view tag:         0x20
+//   stealth address:  0xd8606ed2ecdb71fdcb8cca8fa1925ff84238f2a9
+```
+
 ## Deployments
 
 ### Sepolia (chain `11155111`)

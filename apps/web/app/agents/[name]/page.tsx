@@ -6,6 +6,7 @@ import { sepoliaDeployment } from "@kanbantic/shared";
 
 import { getAgents, getWork } from "../../_lib/api";
 import { etherscanAddress, parseCapabilities, truncateAddress } from "../../_lib/format";
+import { extractStealthMeta } from "../../_lib/stealth";
 import { AddressBadge } from "../../_ui/AddressBadge";
 import { CopyEndpointButton } from "../../_ui/CopyEndpointButton";
 import { McpTryPanel } from "../../_ui/McpTryPanel";
@@ -25,7 +26,12 @@ export default async function AgentProfilePage({ params }: PageProps) {
     notFound();
   }
 
-  const tags = parseCapabilities(agent.capabilities);
+  const allTags = parseCapabilities(agent.capabilities);
+  // Hide the `stealth=<meta>` token from the visible chips — the meta
+  // address is multi-line hex and shouldn't be shown raw in the chip
+  // strip. The "Privacy by Design" badge below renders in its place.
+  const tags = allTags.filter((t) => !t.toLowerCase().startsWith("stealth="));
+  const stealthMeta = extractStealthMeta(agent.capabilities);
   const ensName = `${agent.label}.kanbantic.eth`;
 
   let recentBounties: Awaited<ReturnType<typeof getWork>>["bounties"] = [];
@@ -51,7 +57,7 @@ export default async function AgentProfilePage({ params }: PageProps) {
           <span>owner</span>
           <AddressBadge address={agent.owner} showEtherscan />
         </div>
-        {tags.length > 0 ? (
+        {tags.length > 0 || stealthMeta !== null ? (
           <ul className="flex flex-wrap gap-1.5">
             {tags.map((tag) => (
               <li
@@ -61,6 +67,15 @@ export default async function AgentProfilePage({ params }: PageProps) {
                 {tag}
               </li>
             ))}
+            {stealthMeta !== null ? (
+              <li
+                title={stealthMeta}
+                data-testid="stealth-badge"
+                className="rounded-full border border-violet-400/40 bg-violet-400/10 px-2.5 py-1 text-xs font-semibold tracking-wide text-violet-200"
+              >
+                Privacy by Design · EIP-5564
+              </li>
+            ) : null}
           </ul>
         ) : null}
       </header>
