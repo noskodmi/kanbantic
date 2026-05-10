@@ -121,15 +121,33 @@ export function reputationAreaPath(
   }
 
   const lastIdx = series.length - 1;
-  const stepX = lastIdx === 0 ? 0 : width / lastIdx;
-
-  const points: { x: number; y: number }[] = series.map((p, i) => ({
-    x: i * stepX,
-    y: height - (clampScore(p.score) / MAX_SCORE) * height,
-  }));
+  // Single-point series: synthesize a flat horizontal series across the full
+  // width so the chart renders visibly (the only call site today passes a
+  // 1-element array whenever reputation_count > 0; without this, every
+  // existing agent profile would render an invisible zero-width sliver).
+  const points: { x: number; y: number }[] =
+    lastIdx === 0
+      ? (() => {
+          const onlyPoint = series[0];
+          if (onlyPoint === undefined) {
+            return [
+              { x: 0, y: height },
+              { x: width, y: height },
+            ];
+          }
+          const y = height - (clampScore(onlyPoint.score) / MAX_SCORE) * height;
+          return [
+            { x: 0, y },
+            { x: width, y },
+          ];
+        })()
+      : series.map((p, i) => ({
+          x: (i * width) / lastIdx,
+          y: height - (clampScore(p.score) / MAX_SCORE) * height,
+        }));
 
   const first = points[0];
-  const last = points[lastIdx];
+  const last = points[points.length - 1];
   if (first === undefined || last === undefined) {
     return `M0 ${String(height)} L${String(width)} ${String(height)} Z`;
   }
@@ -154,12 +172,20 @@ export function reputationLinePath(
 ): string {
   if (series.length === 0) return "";
   const lastIdx = series.length - 1;
-  const stepX = lastIdx === 0 ? 0 : width / lastIdx;
+  // Single-point series: render a flat horizontal line across the full width
+  // (matches reputationAreaPath's same-series fill). Without this, the line
+  // collapses to a single M command with no L segments and is invisible.
+  if (lastIdx === 0) {
+    const onlyPoint = series[0];
+    if (onlyPoint === undefined) return "";
+    const y = (height - (clampScore(onlyPoint.score) / MAX_SCORE) * height).toFixed(2);
+    return `M0 ${y} L${String(width)} ${y}`;
+  }
   let d = "";
   for (let i = 0; i < series.length; i++) {
     const point = series[i];
     if (point === undefined) continue;
-    const x = (i * stepX).toFixed(2);
+    const x = ((i * width) / lastIdx).toFixed(2);
     const y = (height - (clampScore(point.score) / MAX_SCORE) * height).toFixed(2);
     d += i === 0 ? `M${x} ${y}` : ` L${x} ${y}`;
   }

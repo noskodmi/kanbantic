@@ -32,12 +32,8 @@ export const PUBLIC_ROOT_NAMEHASHES: readonly string[] = [
 /**
  * Append a public-only workspace ACL filter to `wb` (in-place). After
  * this call, the WHERE clause restricts results to bounties whose
- * `workspace_node` is one of the public roots.
- *
- * TODO(workspace-acl): once Phase 2B-A's requireSiwe lands, gate
- * workspace-scoped reads on the SIWE address being a member —
- * augment this with `OR workspace_node IN (SELECT ws_node FROM
- * workspace_members WHERE LOWER(address) = LOWER(?) AND status = 'active')`.
+ * `workspace_node` is one of the public roots. Use this when the
+ * caller is unauthenticated.
  */
 export function applyWorkspaceAclPublicOnly(wb: WhereBuilder, column = "workspace_node"): void {
   const placeholders = PUBLIC_ROOT_NAMEHASHES.map(() => "?").join(", ");
@@ -45,10 +41,56 @@ export function applyWorkspaceAclPublicOnly(wb: WhereBuilder, column = "workspac
 }
 
 /**
+ * Append the SIWE-aware workspace ACL filter: union of public roots and
+ * any workspace the caller is an active member of. Use this when the
+ * request carries a verified SIWE token; falls back to public-only if
+ * `callerAddress` is null/undefined.
+ */
+export function applyWorkspaceAcl(
+  wb: WhereBuilder,
+  callerAddress: string | null | undefined,
+  column = "workspace_node",
+): void {
+  if (callerAddress === null || callerAddress === undefined || callerAddress.length === 0) {
+    applyWorkspaceAclPublicOnly(wb, column);
+    return;
+  }
+  const placeholders = PUBLIC_ROOT_NAMEHASHES.map(() => "?").join(", ");
+  wb.raw(
+    `(LOWER(${column}) IN (${placeholders})` +
+      ` OR LOWER(${column}) IN (SELECT LOWER(ws_node) FROM workspace_members WHERE LOWER(address) = LOWER(?) AND status = 'active'))`,
+    ...PUBLIC_ROOT_NAMEHASHES,
+    callerAddress.toLowerCase(),
+  );
+}
+
+/**
  * True if a single bounty's `workspace_node` is publicly readable
- * without auth. Used by the per-bounty detail endpoint.
+ * without auth.
  */
 export function isPublicWorkspace(workspaceNode: string | null | undefined): boolean {
   if (workspaceNode === null || workspaceNode === undefined) return true;
   return PUBLIC_ROOT_NAMEHASHES.includes(workspaceNode.toLowerCase());
+}
+
+/**
+ * True if `callerAddress` is an active member of `workspaceNode`. Use
+ * for per-bounty detail endpoints when the bounty is not publicly
+ * readable. `db` is `env.DB`.
+ */
+export async function isWorkspaceMember(
+  db: D1Database,
+  workspaceNode: string,
+  callerAddress: string | null | undefined,
+): Promise<boolean> {
+  if (callerAddress === null || callerAddress === undefined || callerAddress.length === 0) {
+    return false;
+  }
+  const row = await db
+    .prepare(
+      "SELECT 1 AS one FROM workspace_members WHERE LOWER(ws_node) = LOWER(?) AND LOWER(address) = LOWER(?) AND status = 'active' LIMIT 1",
+    )
+    .bind(workspaceNode, callerAddress)
+    .first<{ one: number }>();
+  return row !== null;
 }

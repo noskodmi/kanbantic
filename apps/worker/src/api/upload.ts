@@ -25,7 +25,7 @@ import { applyMigrations } from "../db/migrate.js";
 import type { Env } from "../env.js";
 import type { RouteContext } from "../router.js";
 import { requireSiwe, SiweAuthError } from "../auth/siwe.js";
-import { uploadBytes, UploadTooLargeError } from "../swarm/upload.js";
+import { SWARM_CHUNK_SIZE, uploadBytes, UploadTooLargeError } from "../swarm/upload.js";
 
 const REF_REGEX = /^0x[a-fA-F0-9]{64}$/;
 
@@ -37,6 +37,24 @@ export async function uploadHandler(request: Request, env: Env): Promise<Respons
   } catch (err) {
     if (err instanceof SiweAuthError) return err.toResponse();
     throw err;
+  }
+
+  // Reject oversized payloads at the I/O boundary before buffering. Without
+  // this, an authenticated caller could stream up to Cloudflare's 100 MB body
+  // limit and the worker would buffer it all into memory before the
+  // downstream chunk-size guard (~4 KB) fires.
+  const contentLengthRaw = request.headers.get("content-length");
+  if (contentLengthRaw !== null) {
+    const declared = Number.parseInt(contentLengthRaw, 10);
+    if (Number.isFinite(declared) && declared > SWARM_CHUNK_SIZE) {
+      return Response.json(
+        {
+          error: "payload_too_large",
+          message: `Body exceeds the ${String(SWARM_CHUNK_SIZE)}-byte v0.1 single-chunk cap.`,
+        },
+        { status: 413 },
+      );
+    }
   }
 
   const body = await request.arrayBuffer();

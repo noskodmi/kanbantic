@@ -5,10 +5,11 @@ import type {
   BountySummary,
 } from "@kanbantic/shared";
 
+import { optionalSiwe } from "../auth/siwe.js";
 import { applyMigrations } from "../db/migrate.js";
 import type { Env } from "../env.js";
 import type { RouteContext } from "../router.js";
-import { applyWorkspaceAclPublicOnly } from "./_workspace-acl.js";
+import { applyWorkspaceAcl } from "./_workspace-acl.js";
 import { WhereBuilder } from "./_filters.js";
 
 const RECENT_BOUNTIES_LIMIT = 20;
@@ -22,7 +23,7 @@ const RECENT_ATTESTATIONS_LIMIT = 50;
  * 0x-prefixed namehash; comparison is case-insensitive.
  */
 export async function agentDetailHandler(
-  _request: Request,
+  request: Request,
   env: Env,
   _ctx: ExecutionContext,
   routeCtx: RouteContext,
@@ -61,10 +62,11 @@ export async function agentDetailHandler(
     .all<AttestationSummary>();
 
   // Recent bounties this agent has claimed. Workspace-private rows are
-  // hidden by the public-only ACL until SIWE wires real membership.
+  // gated on SIWE membership; anonymous callers see only public roots.
+  const session = await optionalSiwe(request, env);
   const bountiesWb = new WhereBuilder();
   bountiesWb.eqLower("claimer_node", node);
-  applyWorkspaceAclPublicOnly(bountiesWb);
+  applyWorkspaceAcl(bountiesWb, session?.address);
 
   const bountiesSql =
     `SELECT id, poster, capability, reward, description_ref, expires_at,
@@ -86,9 +88,7 @@ export async function agentDetailHandler(
     attestations: attestationsResult.results,
     recent_bounties: bountiesResult.results,
   };
-  return Response.json(body, {
-    headers: {
-      "cache-control": "public, max-age=10, stale-while-revalidate=60",
-    },
-  });
+  const cacheControl =
+    session === null ? "public, max-age=10, stale-while-revalidate=60" : "private, no-cache";
+  return Response.json(body, { headers: { "cache-control": cacheControl } });
 }

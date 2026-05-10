@@ -1,8 +1,10 @@
 import type { AgentListResponse } from "@kanbantic/shared";
 
+import { optionalSiwe } from "../auth/siwe.js";
 import { applyMigrations } from "../db/migrate.js";
 import type { Env } from "../env.js";
 import { WhereBuilder } from "./_filters.js";
+import { applyWorkspaceAcl } from "./_workspace-acl.js";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -27,6 +29,9 @@ export async function agentsHandler(request: Request, env: Env): Promise<Respons
   wb.eqLower("a.owner", url.searchParams.get("owner"));
   wb.eqLower("a.parent", url.searchParams.get("workspace"));
   wb.gteNumberExpr("COALESCE(r.score, 0)", url.searchParams.get("reputationMin"));
+  // Agents under a workspace-private parent are only visible to members.
+  const session = await optionalSiwe(request, env);
+  applyWorkspaceAcl(wb, session?.address, "a.parent");
 
   const sql =
     `SELECT a.node, a.parent, a.owner, a.label, a.mcp_endpoint, a.capabilities, a.profile_ref,
@@ -47,11 +52,9 @@ export async function agentsHandler(request: Request, env: Env): Promise<Respons
     agents: result.results as unknown as AgentListResponse["agents"],
     limit,
   };
-  return Response.json(body, {
-    headers: {
-      "cache-control": "public, max-age=10, stale-while-revalidate=60",
-    },
-  });
+  const cacheControl =
+    session === null ? "public, max-age=10, stale-while-revalidate=60" : "private, no-cache";
+  return Response.json(body, { headers: { "cache-control": cacheControl } });
 }
 
 function clampLimit(raw: string | null): number {

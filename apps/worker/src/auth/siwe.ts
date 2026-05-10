@@ -51,13 +51,6 @@ interface SiwePayload {
   exp: number;
 }
 
-interface SiweNonceRow {
-  nonce: string;
-  address: string | null;
-  issued_at: number;
-  used: number;
-}
-
 interface SiweVerifyBody {
   message: string;
   signature: string;
@@ -315,24 +308,69 @@ export async function siweVerifyHandler(request: Request, env: Env): Promise<Res
     ).toResponse();
   }
 
-  // Look up + claim the nonce.
-  const row = await env.DB.prepare(
-    "SELECT nonce, address, issued_at, used FROM siwe_nonces WHERE nonce = ?",
-  )
-    .bind(parsed.nonce)
-    .first<SiweNonceRow>();
-  if (row === null) {
-    return new SiweAuthError(
-      400,
-      "unknown_nonce",
-      "Nonce was never issued or has been GC'd.",
-    ).toResponse();
+  // Reject deliberately-malformed `Expiration Time` (NaN). EIP-4361 says
+  // expirationTime is OPTIONAL; if it's present we require it to parse.
+  // Without this check, a client could submit `Expiration Time: garbage`
+  // and bypass any expiry the field was supposed to declare.
+  let messageExpiresAtMs: number | null = null;
+  if (parsed.expirationTime !== null) {
+    const expMs = Date.parse(parsed.expirationTime);
+    if (!Number.isFinite(expMs)) {
+      return new SiweAuthError(
+        400,
+        "message_expiration_unparseable",
+        "Expiration Time field present but not a valid ISO-8601 timestamp.",
+      ).toResponse();
+    }
+    if (expMs <= Date.now()) {
+      return new SiweAuthError(
+        400,
+        "message_expired",
+        "Message expirationTime has passed.",
+      ).toResponse();
+    }
+    messageExpiresAtMs = expMs;
   }
-  if (row.used !== 0) {
+
+  // Atomically claim the nonce BEFORE running the (slow, racy) signature
+  // verification. The conditional UPDATE is the only consume-once guarantee
+  // D1 gives us — without it, two concurrent verifies for the same
+  // {message, signature} both pass and both mint a session token.
+  const lowerAddress = parsed.address.toLowerCase();
+  const claim = await env.DB.prepare(
+    "UPDATE siwe_nonces SET used = 1, address = ? WHERE nonce = ? AND used = 0",
+  )
+    .bind(lowerAddress, parsed.nonce)
+    .run();
+  if (claim.meta.changes !== 1) {
+    // Either the nonce was never issued, was already used, or another
+    // request claimed it concurrently. Look up the row to disambiguate
+    // the error code, but treat all three as the same outward result.
+    const row = await env.DB.prepare(
+      "SELECT nonce, used, issued_at FROM siwe_nonces WHERE nonce = ?",
+    )
+      .bind(parsed.nonce)
+      .first<{ nonce: string; used: number; issued_at: number }>();
+    if (row === null) {
+      return new SiweAuthError(
+        400,
+        "unknown_nonce",
+        "Nonce was never issued or has been GC'd.",
+      ).toResponse();
+    }
     return new SiweAuthError(400, "nonce_used", "Nonce has already been redeemed.").toResponse();
   }
+
   const nowSec = Math.floor(Date.now() / 1000);
-  if (nowSec - row.issued_at > NONCE_TTL_SECONDS) {
+  // Re-read the issued_at to enforce the 5-minute TTL after claiming. If
+  // expired, the nonce has now been "burned" without issuing a token —
+  // intentional: an attacker can't replay an expired nonce, but a slow
+  // client that races past the deadline loses the nonce too. They retry
+  // with a fresh nonce.
+  const claimed = await env.DB.prepare("SELECT issued_at FROM siwe_nonces WHERE nonce = ?")
+    .bind(parsed.nonce)
+    .first<{ issued_at: number }>();
+  if (claimed === null || nowSec - claimed.issued_at > NONCE_TTL_SECONDS) {
     return new SiweAuthError(
       400,
       "nonce_expired",
@@ -340,19 +378,8 @@ export async function siweVerifyHandler(request: Request, env: Env): Promise<Res
     ).toResponse();
   }
 
-  // Optional: enforce `Expiration Time` if the message included one.
-  if (parsed.expirationTime !== null) {
-    const expMs = Date.parse(parsed.expirationTime);
-    if (Number.isFinite(expMs) && expMs <= Date.now()) {
-      return new SiweAuthError(
-        400,
-        "message_expired",
-        "Message expirationTime has passed.",
-      ).toResponse();
-    }
-  }
-
-  // Verify the signature itself.
+  // Verify the signature. Now that the nonce is consumed, even a successful
+  // signature verification can't be replayed.
   let valid: boolean;
   try {
     valid = await verifyMessage({
@@ -375,12 +402,9 @@ export async function siweVerifyHandler(request: Request, env: Env): Promise<Res
       "Signature does not match address.",
     ).toResponse();
   }
-
-  // Mark nonce used + bind to the address (audit trail).
-  const lowerAddress = parsed.address.toLowerCase();
-  await env.DB.prepare("UPDATE siwe_nonces SET used = 1, address = ? WHERE nonce = ?")
-    .bind(lowerAddress, parsed.nonce)
-    .run();
+  // Suppress unused-var lint for messageExpiresAtMs — kept for future use
+  // (e.g. capping session expiry to the message's stated lifetime).
+  void messageExpiresAtMs;
 
   const payload: SiwePayload = {
     sub: lowerAddress,
@@ -417,4 +441,29 @@ export async function requireSiwe(request: Request, env: Env): Promise<{ address
   }
   const payload = await verifySessionToken(env.SIWE_HMAC_SECRET, token);
   return { address: getAddress(payload.sub) };
+}
+
+/**
+ * Like {@link requireSiwe} but never throws. Returns `null` when no
+ * Authorization header is present, the token is invalid, expired, or
+ * the HMAC secret isn't provisioned. Use this on read endpoints where
+ * the public-only fallback is acceptable.
+ */
+export async function optionalSiwe(
+  request: Request,
+  env: Env,
+): Promise<{ address: Address } | null> {
+  if (!env.SIWE_HMAC_SECRET) return null;
+  const header = request.headers.get("authorization");
+  if (header === null) return null;
+  const trimmed = header.trim();
+  if (!/^Bearer\s+/i.test(trimmed)) return null;
+  const token = trimmed.replace(/^Bearer\s+/i, "").trim();
+  if (token.length === 0) return null;
+  try {
+    const payload = await verifySessionToken(env.SIWE_HMAC_SECRET, token);
+    return { address: getAddress(payload.sub) };
+  } catch {
+    return null;
+  }
 }

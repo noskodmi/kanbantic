@@ -22,7 +22,16 @@ describe("GET /api/agents", () => {
     await env.DB.prepare(
       "INSERT INTO agents (node, parent, owner, label, mcp_endpoint, capabilities, registered_at_block, registered_at_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
-      .bind("0xnode1", "0xparent", "0xowner", "alice", "https://x/mcp", "research", 100, 1715300000)
+      .bind(
+        "0xnode1",
+        "0xb4c81d607382cd32c89297f9a8c9984b690260118843ad2961d043cb2ea948b7",
+        "0xowner",
+        "alice",
+        "https://x/mcp",
+        "research",
+        100,
+        1715300000,
+      )
       .run();
     await env.DB.prepare(
       "INSERT INTO agent_reputation (node, score, attestation_count, last_updated) VALUES (?, ?, ?, ?)",
@@ -47,7 +56,7 @@ describe("GET /api/agents", () => {
       )
         .bind(
           `0xnode${String(i)}`,
-          "0xparent",
+          "0xb4c81d607382cd32c89297f9a8c9984b690260118843ad2961d043cb2ea948b7",
           "0xowner",
           `agent${String(i)}`,
           "https://x/mcp",
@@ -78,7 +87,7 @@ describe("GET /api/agents", () => {
       )
         .bind(
           "0xnodeA",
-          "0xparentP",
+          "0xb4c81d607382cd32c89297f9a8c9984b690260118843ad2961d043cb2ea948b7",
           "0xownerA",
           "alice",
           "https://x/mcp",
@@ -92,7 +101,7 @@ describe("GET /api/agents", () => {
       )
         .bind(
           "0xnodeB",
-          "0xparentP",
+          "0xb4c81d607382cd32c89297f9a8c9984b690260118843ad2961d043cb2ea948b7",
           "0xownerB",
           "bob",
           "https://x/mcp",
@@ -106,7 +115,7 @@ describe("GET /api/agents", () => {
       )
         .bind(
           "0xnodeC",
-          "0xparentQ",
+          "0xb4c81d607382cd32c89297f9a8c9984b690260118843ad2961d043cb2ea948b7",
           "0xownerC",
           "carol",
           "https://x/mcp",
@@ -148,10 +157,20 @@ describe("GET /api/agents", () => {
       expect(body.agents.map((a) => a.label)).toEqual(["alice"]);
     });
 
-    it("?workspace= filters by parent namehash", async () => {
-      const res = await SELF.fetch("https://example.com/api/agents?workspace=0xparentQ");
+    it("?workspace= filters by parent namehash (public root match returns all 3)", async () => {
+      const res = await SELF.fetch(
+        "https://example.com/api/agents?workspace=0xb4c81d607382cd32c89297f9a8c9984b690260118843ad2961d043cb2ea948b7",
+      );
       const body = await res.json<{ agents: { label: string }[] }>();
-      expect(body.agents.map((a) => a.label)).toEqual(["carol"]);
+      expect(body.agents.map((a) => a.label).sort()).toEqual(["alice", "bob", "carol"]);
+    });
+
+    it("?workspace= for a non-public namehash returns empty without auth (ACL)", async () => {
+      const res = await SELF.fetch(
+        "https://example.com/api/agents?workspace=0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+      );
+      const body = await res.json<{ agents: { label: string }[] }>();
+      expect(body.agents).toEqual([]);
     });
 
     it("combines filters with AND semantics", async () => {
@@ -184,7 +203,16 @@ describe("GET /api/agents/:node", () => {
     await env.DB.prepare(
       "INSERT INTO agents (node, parent, owner, label, mcp_endpoint, capabilities, registered_at_block, registered_at_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
-      .bind("0xnode1", "0xparent", "0xowner", "alice", "https://x/mcp", "research", 100, 1715300000)
+      .bind(
+        "0xnode1",
+        "0xb4c81d607382cd32c89297f9a8c9984b690260118843ad2961d043cb2ea948b7",
+        "0xowner",
+        "alice",
+        "https://x/mcp",
+        "research",
+        100,
+        1715300000,
+      )
       .run();
     await env.DB.prepare(
       "INSERT INTO agent_reputation (node, score, attestation_count, last_updated) VALUES (?, ?, ?, ?)",

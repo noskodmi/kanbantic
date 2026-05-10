@@ -29,6 +29,8 @@ import { bmtRoot, bytesToHex, SWARM_CHUNK_SIZE } from "@kanbantic/swarm-verified
 
 import type { Env } from "../env.js";
 
+export { SWARM_CHUNK_SIZE };
+
 const SWARM_GATEWAY_UPLOAD_URL = "https://api.gateway.ethswarm.org/bzz";
 
 export type UploadMode = "gateway" | "local";

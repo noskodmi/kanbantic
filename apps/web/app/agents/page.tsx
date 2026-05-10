@@ -1,4 +1,5 @@
 import type { AgentListResponse } from "@kanbantic/shared";
+import { Suspense } from "react";
 
 import { AgentCard } from "../_ui/AgentCard";
 import { getAgents } from "../_lib/api";
@@ -35,7 +36,9 @@ export default async function AgentsPage({ searchParams }: AgentsPageProps) {
         </p>
       </header>
 
-      <CapabilityFilter />
+      <Suspense fallback={null}>
+        <CapabilityFilter />
+      </Suspense>
 
       {fetchError ? (
         <EmptyState

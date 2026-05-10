@@ -17,6 +17,16 @@ export async function handleAgentEvent(db: D1Database, log: DecodedLog, ts: numb
         )
         .bind(node, parent, owner, label, mcpEndpoint, capabilities, log.blockNumber, ts)
         .run();
+      // Reconcile against the Apify discovery table: if this agent's
+      // label was previously suggested by the discoverer, flip its
+      // status to 'claimed' and record the on-chain node. Lets
+      // /agents/[name] render the "Discovered via Apify" provenance pill.
+      await db
+        .prepare(
+          "UPDATE discovered_agents_apify SET status = 'claimed', claimed_node = ? WHERE LOWER(suggested_label) = LOWER(?) AND status = 'discovered'",
+        )
+        .bind(node, label)
+        .run();
       return;
     }
 

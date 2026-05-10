@@ -1,9 +1,10 @@
 import type { BountyListResponse } from "@kanbantic/shared";
 
+import { optionalSiwe } from "../auth/siwe.js";
 import { applyMigrations } from "../db/migrate.js";
 import type { Env } from "../env.js";
 import { WhereBuilder } from "./_filters.js";
-import { applyWorkspaceAclPublicOnly } from "./_workspace-acl.js";
+import { applyWorkspaceAcl } from "./_workspace-acl.js";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -43,12 +44,10 @@ export async function workHandler(request: Request, env: Env): Promise<Response>
   wb.eqLower("workspace_node", url.searchParams.get("workspace"));
   wb.eqLower("claimer_node", url.searchParams.get("claimer_node"));
 
-  // TODO(workspace-acl): once Phase 2B-A's requireSiwe lands, gate
-  // workspace-scoped reads on the SIWE address being a member of the
-  // workspace (LEFT JOIN workspace_members WHERE address = siwe AND
-  // status = 'active'). For Phase 2B v0.1, every read is anonymous and
-  // restricted to the public roots.
-  applyWorkspaceAclPublicOnly(wb);
+  // SIWE-aware workspace ACL: anonymous callers see only public roots;
+  // authenticated callers also see workspaces they're an active member of.
+  const session = await optionalSiwe(request, env);
+  applyWorkspaceAcl(wb, session?.address);
 
   const sql =
     `SELECT id, poster, capability, reward, description_ref, expires_at,
@@ -69,11 +68,11 @@ export async function workHandler(request: Request, env: Env): Promise<Response>
     bounties: result.results as unknown as BountyListResponse["bounties"],
     limit,
   };
-  return Response.json(body, {
-    headers: {
-      "cache-control": "public, max-age=10, stale-while-revalidate=60",
-    },
-  });
+  // Authenticated responses are workspace-scoped, so they must NOT be
+  // shared via public caches.
+  const cacheControl =
+    session === null ? "public, max-age=10, stale-while-revalidate=60" : "private, no-cache";
+  return Response.json(body, { headers: { "cache-control": cacheControl } });
 }
 
 function clampLimit(raw: string | null): number {

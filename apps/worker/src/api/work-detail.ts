@@ -6,10 +6,11 @@ import type {
   BountySummary,
 } from "@kanbantic/shared";
 
+import { optionalSiwe } from "../auth/siwe.js";
 import { applyMigrations } from "../db/migrate.js";
 import type { Env } from "../env.js";
 import type { RouteContext } from "../router.js";
-import { isPublicWorkspace } from "./_workspace-acl.js";
+import { isPublicWorkspace, isWorkspaceMember } from "./_workspace-acl.js";
 
 /**
  * `GET /api/work/:id` — bounty + status timeline + (optional) joined
@@ -23,7 +24,7 @@ import { isPublicWorkspace } from "./_workspace-acl.js";
  * non-positive ids return 400.
  */
 export async function workDetailHandler(
-  _request: Request,
+  request: Request,
   env: Env,
   _ctx: ExecutionContext,
   routeCtx: RouteContext,
@@ -55,11 +56,19 @@ export async function workDetailHandler(
     return Response.json({ error: "not_found" }, { status: 404 });
   }
 
-  // TODO(workspace-acl): once Phase 2B-A's requireSiwe lands, allow
-  // members of bounty.workspace_node to read workspace-private rows.
-  // Until then we 404 to avoid leaking the existence of private bounties.
+  // SIWE-aware workspace ACL: workspace-private bounties 404 anonymously,
+  // but if the caller has a valid SIWE session AND is an active member of
+  // the bounty's workspace, they get to read the row.
+  let isAuthenticated = false;
   if (!isPublicWorkspace(bounty.workspace_node)) {
-    return Response.json({ error: "not_found" }, { status: 404 });
+    const session = await optionalSiwe(request, env);
+    if (
+      session === null ||
+      !(await isWorkspaceMember(env.DB, bounty.workspace_node, session.address))
+    ) {
+      return Response.json({ error: "not_found" }, { status: 404 });
+    }
+    isAuthenticated = true;
   }
 
   const historyResult = await env.DB.prepare(
@@ -103,9 +112,8 @@ export async function workDetailHandler(
     claimer_agent: claimerAgent,
     attestations: attestationsResult.results,
   };
-  return Response.json(body, {
-    headers: {
-      "cache-control": "public, max-age=10, stale-while-revalidate=60",
-    },
-  });
+  const cacheControl = isAuthenticated
+    ? "private, no-cache"
+    : "public, max-age=10, stale-while-revalidate=60";
+  return Response.json(body, { headers: { "cache-control": cacheControl } });
 }

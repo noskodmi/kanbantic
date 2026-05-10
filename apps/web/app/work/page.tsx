@@ -10,6 +10,7 @@
  */
 
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { getWork } from "../_lib/api.js";
 import { BountyCard } from "./_ui/BountyCard.js";
@@ -54,8 +55,12 @@ export default async function WorkPage({ searchParams }: WorkPageProps) {
         </p>
       </header>
 
-      <StatusFilter />
-      <WorkFilters />
+      <Suspense fallback={null}>
+        <StatusFilter />
+      </Suspense>
+      <Suspense fallback={null}>
+        <WorkFilters />
+      </Suspense>
 
       {bounties.length === 0 ? (
         <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-white/15 bg-white/[0.02] px-6 py-16 text-center">

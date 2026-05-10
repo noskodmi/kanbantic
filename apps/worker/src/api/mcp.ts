@@ -17,7 +17,10 @@
 
 import { sepoliaDeployment } from "@kanbantic/shared";
 
+import { optionalSiwe } from "../auth/siwe.js";
 import type { Env } from "../env.js";
+import { WhereBuilder } from "./_filters.js";
+import { applyWorkspaceAcl } from "./_workspace-acl.js";
 
 const PROTOCOL_VERSION = "2024-11-05";
 const SERVER_NAME = "kanbantic-mcp";
@@ -80,54 +83,64 @@ const TOOLS = [
   },
 ] as const;
 
-async function readWorkerJson(env: Env, path: string): Promise<unknown> {
-  // Internal call: hit our own host. Cloudflare Workers don't allow
-  // self-fetch via the public hostname inside the same isolate; instead,
-  // call the handler directly via the bound D1.
-  // Simpler: query D1 ourselves for the same shape the public endpoint emits.
-  if (path === "/api/agents") {
-    const result = await env.DB.prepare(
-      `SELECT a.node, a.parent, a.owner, a.label, a.mcp_endpoint, a.capabilities, a.profile_ref,
-              a.registered_at_block, a.registered_at_ts,
-              COALESCE(r.score, 0) AS reputation_score,
-              COALESCE(r.attestation_count, 0) AS reputation_count
-         FROM agents a
-         LEFT JOIN agent_reputation r ON r.node = a.node
-         ORDER BY a.registered_at_block DESC
-         LIMIT 50`,
-    ).all();
-    return { agents: result.results, limit: 50 };
-  }
-  if (path === "/api/work") {
-    const result = await env.DB.prepare(
-      `SELECT id, poster, capability, reward, description_ref, expires_at,
-              claim_window_blocks, claim_window_start_block, status,
-              claimer_node, claimer_address, workspace_node, arbiter_council,
-              created_at_block, created_at_ts, resolved_at_block
-         FROM bounties
-         ORDER BY created_at_block DESC
-         LIMIT 50`,
-    ).all();
-    return { bounties: result.results, limit: 50 };
-  }
-  if (path === "/api/status") {
-    const row = await env.DB.prepare("SELECT last_block FROM index_cursor WHERE chain_id = ?")
-      .bind(Number(env.SEPOLIA_CHAIN_ID))
-      .first<{ last_block: number }>();
-    return {
-      chainId: Number(env.SEPOLIA_CHAIN_ID),
-      lastBlock: row?.last_block ?? 0,
-      contracts: sepoliaDeployment.contracts,
-      ens: sepoliaDeployment.ens,
-    };
-  }
-  return null;
+async function listAgentsTool(env: Env, callerAddress: string | null): Promise<unknown> {
+  const wb = new WhereBuilder();
+  applyWorkspaceAcl(wb, callerAddress, "a.parent");
+  const sql =
+    `SELECT a.node, a.parent, a.owner, a.label, a.mcp_endpoint, a.capabilities, a.profile_ref,
+            a.registered_at_block, a.registered_at_ts,
+            COALESCE(r.score, 0) AS reputation_score,
+            COALESCE(r.attestation_count, 0) AS reputation_count
+       FROM agents a
+       LEFT JOIN agent_reputation r ON r.node = a.node` +
+    wb.whereSql() +
+    ` ORDER BY a.registered_at_block DESC
+       LIMIT 50`;
+  const result = await env.DB.prepare(sql)
+    .bind(...wb.binds())
+    .all();
+  return { agents: result.results, limit: 50 };
 }
 
-async function callTool(env: Env, name: string, _args: unknown): Promise<unknown> {
-  if (name === "list_agents") return readWorkerJson(env, "/api/agents");
-  if (name === "list_bounties") return readWorkerJson(env, "/api/work");
-  if (name === "get_status") return readWorkerJson(env, "/api/status");
+async function listBountiesTool(env: Env, callerAddress: string | null): Promise<unknown> {
+  const wb = new WhereBuilder();
+  applyWorkspaceAcl(wb, callerAddress);
+  const sql =
+    `SELECT id, poster, capability, reward, description_ref, expires_at,
+            claim_window_blocks, claim_window_start_block, status,
+            claimer_node, claimer_address, workspace_node, arbiter_council,
+            created_at_block, created_at_ts, resolved_at_block
+       FROM bounties` +
+    wb.whereSql() +
+    ` ORDER BY created_at_block DESC
+       LIMIT 50`;
+  const result = await env.DB.prepare(sql)
+    .bind(...wb.binds())
+    .all();
+  return { bounties: result.results, limit: 50 };
+}
+
+async function getStatusTool(env: Env): Promise<unknown> {
+  const row = await env.DB.prepare("SELECT last_block FROM index_cursor WHERE chain_id = ?")
+    .bind(Number(env.SEPOLIA_CHAIN_ID))
+    .first<{ last_block: number }>();
+  return {
+    chainId: Number(env.SEPOLIA_CHAIN_ID),
+    lastBlock: row?.last_block ?? 0,
+    contracts: sepoliaDeployment.contracts,
+    ens: sepoliaDeployment.ens,
+  };
+}
+
+async function callTool(
+  env: Env,
+  callerAddress: string | null,
+  name: string,
+  _args: unknown,
+): Promise<unknown> {
+  if (name === "list_agents") return listAgentsTool(env, callerAddress);
+  if (name === "list_bounties") return listBountiesTool(env, callerAddress);
+  if (name === "get_status") return getStatusTool(env);
   throw new Error(`unknown tool: ${name}`);
 }
 
@@ -168,8 +181,11 @@ export async function mcpHandler(request: Request, env: Env): Promise<Response> 
     if (typeof p.name !== "string") {
       return rpcError(id, -32602, "Invalid params: missing tool name");
     }
+    // Workspace-private rows are gated on a verified SIWE Authorization
+    // header; without it the helpers fall back to public-only.
+    const session = await optionalSiwe(request, env);
     try {
-      const result = await callTool(env, p.name, p.arguments);
+      const result = await callTool(env, session?.address ?? null, p.name, p.arguments);
       return rpcResult(id, {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       });
