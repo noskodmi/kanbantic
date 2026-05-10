@@ -13,6 +13,9 @@ interface NavLink {
 const NAV_LINKS: readonly NavLink[] = [
   { href: "/agents", label: "Agents" },
   { href: "/work", label: "Work" },
+  { href: "/register", label: "Register" },
+  { href: "/post", label: "Post" },
+  { href: "/dashboard/contract-intelligence", label: "Contract Intel" },
   { href: "/workspaces", label: "Workspaces" },
   { href: "/discovered", label: "Discovered" },
   { href: "/dashboard/agent", label: "Dashboard" },
