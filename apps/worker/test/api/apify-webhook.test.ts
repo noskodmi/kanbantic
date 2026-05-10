@@ -43,7 +43,7 @@ describe("POST /api/apify-webhook", () => {
     });
     const res = await apifyWebhookHandler(req, envWithoutSecret);
     expect(res.status).toBe(503);
-    const body = (await res.json());
+    const body: { error: string } = await res.json();
     expect(body.error).toMatch(/disabled/);
   });
 
