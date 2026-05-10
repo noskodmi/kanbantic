@@ -1,0 +1,96 @@
+name: nightly
+
+# Production heartbeat - runs at 02:00 UTC daily and on manual dispatch.
+# Hits the live worker /api/status endpoint, parses the JSON, and fails
+# if either:
+#   1. The indexer's lastBlock lags the current Sepolia head by more
+#      than 600 blocks (~120 minutes at ~12s/block - comfortably above
+#      transient indexer hiccups, comfortably below "the worker is
+#      down").
+#   2. Any of the deployed contract addresses in contracts.* is the
+#      zero address (indicates the deployment manifest desynced from
+#      what the worker is serving).
+#
+# A red run pages whoever owns the workflow via the standard GitHub
+# Actions failure notification.
+#
+# Note on the spec's "fail if Date.now()/1000 - last_block_ts > 600":
+# the worker's /api/status payload exposes lastBlock (block number)
+# rather than a last_block_ts timestamp, so this check translates the
+# freshness guarantee into block-lag terms against a public Sepolia
+# RPC. Same intent: catch a worker that's stopped indexing.
+#
+# e2e.yml lands when the Playwright suite is wired (deferred - Phase 4
+# of the implementation roadmap covers the E2E build).
+#
+# Security: this workflow takes no user-controlled input. The only
+# external data is the JSON returned by the worker /api/status and the
+# block number returned by the public Sepolia RPC; both are written to
+# files first and parsed with a Python script that itself reads from
+# files - no shell interpolation of fetched data.
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  heartbeat:
+    name: production heartbeat
+    runs-on: ubuntu-latest
+    steps:
+      - name: probe worker /api/status
+        env:
+          STATUS_URL: https://kanbantic-api.lizzflix.workers.dev/api/status
+          SEPOLIA_RPC: https://ethereum-sepolia-rpc.publicnode.com
+          MAX_LAG_BLOCKS: "600"
+        run: |
+          set -euo pipefail
+          echo "Probing $STATUS_URL"
+          curl -sSf "$STATUS_URL" -o status.json
+          python3 -m json.tool status.json
+
+          curl -sSf -X POST "$SEPOLIA_RPC" \
+            -H 'content-type: application/json' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' \
+            -o head.json
+
+          python3 <<'PY'
+          import json, os, sys
+
+          max_lag = int(os.environ["MAX_LAG_BLOCKS"])
+          with open("status.json") as f:
+              status = json.load(f)
+          with open("head.json") as f:
+              head_resp = json.load(f)
+
+          worker_block = int(status["lastBlock"])
+          head_block = int(head_resp["result"], 16)
+          lag = head_block - worker_block
+          print(f"worker lastBlock={worker_block}")
+          print(f"sepolia head={head_block}")
+          print(f"indexer lag={lag} blocks (max allowed={max_lag})")
+
+          errs = []
+          if lag > max_lag:
+              errs.append(f"indexer lag {lag} blocks exceeds threshold {max_lag}")
+
+          contracts = status.get("contracts", {})
+          if not contracts:
+              errs.append("no contracts in /api/status payload")
+          zero = "0x" + "0" * 40
+          zeroes = [name for name, addr in contracts.items() if addr.lower() == zero]
+          if zeroes:
+              errs.append(f"contracts at zero address: {', '.join(zeroes)}")
+
+          for e in errs:
+              print(f"::error::{e}")
+          if errs:
+              sys.exit(1)
+
+          print(f"all {len(contracts)} contract addresses non-zero")
+          print("heartbeat green")
+          PY

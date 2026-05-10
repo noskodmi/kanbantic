@@ -1,0 +1,80 @@
+name: deploy
+
+# Auto-deploys worker (Cloudflare) and web (Vercel) on push to main,
+# plus a manual workflow_dispatch trigger for re-runs.
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   worker job:
+#     CLOUDFLARE_API_TOKEN  - Cloudflare API token with Workers + D1 edit
+#     CLOUDFLARE_ACCOUNT_ID - Cloudflare account id (numeric/hex)
+#   web job:
+#     VERCEL_TOKEN          - Vercel personal access token (scope: this team)
+#     VERCEL_ORG_ID         - Vercel team/org id (from `vercel link`)
+#     VERCEL_PROJECT_ID     - Vercel project id (from `.vercel/project.json`)
+#
+# Both jobs are gated on `github.ref == 'refs/heads/main'` so manual
+# dispatches against a feature branch fall through cleanly.
+#
+# Security: this workflow does not consume any user-controlled inputs
+# (PR/issue titles, commit messages, etc.) in run: blocks. All secrets
+# flow through env: as recommended by the Actions injection guide.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  worker:
+    if: github.ref == 'refs/heads/main'
+    name: deploy worker (cloudflare)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm --filter @kanbantic/worker exec wrangler deploy --env=""
+
+  web:
+    if: github.ref == 'refs/heads/main'
+    name: deploy web (vercel)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: build web
+        run: pnpm --filter @kanbantic/web build
+      - name: deploy to vercel (production)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        # The Vercel CLI reads VERCEL_ORG_ID + VERCEL_PROJECT_ID from env
+        # when no `.vercel/` directory exists on disk, which is the case
+        # in CI. `--prod` targets the production environment; `--yes`
+        # accepts any first-run prompts non-interactively.
+        run: npx vercel@latest deploy --prod --token "$VERCEL_TOKEN" --yes
