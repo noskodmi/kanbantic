@@ -26,9 +26,9 @@ import { cn } from "@kanbantic/ui";
 
 import { getWork } from "../../../_lib/api.js";
 import { AddressBadge } from "../../../_ui/AddressBadge.js";
+import { KanbanBoard } from "../../../_ui/KanbanBoard.js";
 import { etherscanAddress, truncateAddress } from "../../../_lib/format.js";
 import { useWorkspaceRegistry } from "../../../_lib/contracts.js";
-import { BountyCard } from "../../../work/_ui/BountyCard.js";
 import { lookupWorkspaceLabel } from "../../_lib/label-cache.js";
 import {
   useWorkspaceAdmin,
@@ -209,24 +209,26 @@ function ResolvedWorkspaceDetail({ resolved }: ResolvedWorkspaceDetailProps) {
 
       {isConnected && isAdmin ? <AddMemberForm wsNode={wsNode} /> : null}
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--color-kanbantic-muted)]">
-          Bounties ({bounties.length})
-        </h2>
+      <section className="flex flex-col gap-3">
+        <div className="flex items-end justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--color-kanbantic-muted)]">
+            Kanban ({bounties.length})
+          </h2>
+          <Link
+            href={`/post?workspace=${wsNode}` as never}
+            className="rounded-md bg-[var(--color-kanbantic-accent)] px-3 py-1.5 text-xs font-semibold text-[var(--color-kanbantic-bg)] transition-opacity hover:opacity-90"
+          >
+            + Create task
+          </Link>
+        </div>
         {bountiesQuery.isLoading ? (
-          <p className="text-sm text-[var(--color-kanbantic-muted)]">Loading bounties…</p>
+          <p className="text-sm text-[var(--color-kanbantic-muted)]">Loading tasks…</p>
         ) : bounties.length === 0 ? (
-          <p className="text-sm text-[var(--color-kanbantic-muted)]">
-            No bounties have been posted to this workspace yet.
+          <p className="rounded-md border border-dashed border-white/15 bg-white/[0.02] px-4 py-8 text-center text-sm text-[var(--color-kanbantic-muted)]">
+            No tasks have been posted to this workspace yet.
           </p>
         ) : (
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {bounties.map((bounty) => (
-              <li key={bounty.id}>
-                <BountyCard bounty={bounty} />
-              </li>
-            ))}
-          </ul>
+          <KanbanBoard bounties={bounties} />
         )}
       </section>
 

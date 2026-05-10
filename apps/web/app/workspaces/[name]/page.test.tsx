@@ -7,7 +7,7 @@ import type { BountyListResponse, BountySummary } from "@kanbantic/shared";
 
 const ADMIN = "0x44C176989D16f5C2A846cf59d4Cf68Af1006dDdE";
 const MEMBER_A = "0x1111111111111111111111111111111111111111";
-const MEMBER_B = "0x2222222222222222222222222222222222222222";
+const _MEMBER_B = "0x2222222222222222222222222222222222222222";
 // namehash("alpha.kanbantic.eth") computed with viem at write time:
 // we just feed the slug "alpha" to the page and let the component compute it.
 const SLUG = "alpha";
@@ -109,49 +109,22 @@ describe("/workspaces/[name] detail page", () => {
     vi.clearAllMocks();
   });
 
-  it("renders the member roster derived from MemberAdded minus MemberRemoved", async () => {
+  it("renders the member roster from the on-chain membersOf view (which includes the admin)", async () => {
     mockReadContract.mockImplementation(({ functionName }: { functionName: string }) => {
       if (functionName === "exists") return Promise.resolve(true);
       if (functionName === "adminOf") return Promise.resolve(ADMIN);
+      // membersOf returns the full active set — the admin AND any
+      // explicitly-added members. Removed members are filtered out
+      // by the contract before this returns.
+      if (functionName === "membersOf") return Promise.resolve([ADMIN, MEMBER_A]);
       return Promise.resolve(null);
-    });
-
-    mockGetLogs.mockImplementation(({ event }: { event: { name: string } }) => {
-      if (event.name === "MemberAdded") {
-        return Promise.resolve([
-          {
-            args: { wsNode: "0x0", member: ADMIN },
-            blockNumber: 100n,
-            logIndex: 0,
-          },
-          {
-            args: { wsNode: "0x0", member: MEMBER_A },
-            blockNumber: 101n,
-            logIndex: 0,
-          },
-          {
-            args: { wsNode: "0x0", member: MEMBER_B },
-            blockNumber: 102n,
-            logIndex: 0,
-          },
-        ]);
-      }
-      if (event.name === "MemberRemoved") {
-        return Promise.resolve([
-          {
-            args: { wsNode: "0x0", member: MEMBER_B },
-            blockNumber: 103n,
-            logIndex: 0,
-          },
-        ]);
-      }
-      return Promise.resolve([]);
     });
 
     await renderDetail();
 
     await waitFor(() => {
-      // 2 active members: ADMIN + MEMBER_A. MEMBER_B was removed.
+      // 2 active members: ADMIN + MEMBER_A. MEMBER_B was removed
+      // (so membersOf doesn't return it).
       expect(screen.getByText(/Members \(2\)/i)).toBeInTheDocument();
     });
 
@@ -181,7 +154,7 @@ describe("/workspaces/[name] detail page", () => {
     await renderDetail();
 
     await waitFor(() => {
-      expect(screen.getByText(/no bounties have been posted/i)).toBeInTheDocument();
+      expect(screen.getByText(/no tasks have been posted/i)).toBeInTheDocument();
     });
   });
 });

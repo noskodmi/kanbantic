@@ -51,13 +51,6 @@ const STALE_MS = 15_000;
 const WORKSPACE_CREATED_EVENT = parseAbiItem(
   "event WorkspaceCreated(bytes32 indexed wsNode, bytes32 indexed parentNode, address indexed admin)",
 );
-const MEMBER_ADDED_EVENT = parseAbiItem(
-  "event MemberAdded(bytes32 indexed wsNode, address indexed member)",
-);
-const MEMBER_REMOVED_EVENT = parseAbiItem(
-  "event MemberRemoved(bytes32 indexed wsNode, address indexed member)",
-);
-
 export function useWorkspaceList(): UseQueryResult<readonly WorkspaceRow[]> {
   const publicClient = usePublicClient();
 
@@ -96,9 +89,15 @@ export function useWorkspaceList(): UseQueryResult<readonly WorkspaceRow[]> {
 }
 
 /**
- * Replays `MemberAdded` minus `MemberRemoved` events for one
- * `wsNode`. Order-sensitive: a removed-then-re-added member ends up
- * active. Tracks final state via a per-address boolean.
+ * Reads the active member set via the on-chain `membersOf(wsNode)` view.
+ *
+ * Why a view call rather than walking `MemberAdded`/`MemberRemoved`
+ * events: the contract creates the workspace creator as a member but
+ * does NOT emit `MemberAdded` for that initial assignment. Replaying
+ * events would silently drop the admin, leaving "0 members" on a
+ * freshly-created workspace. `membersOf` filters its returned array
+ * by the live `_isMember` map, so it gives us the source of truth
+ * including the admin and excluding any removed addresses.
  */
 export function useWorkspaceMembers(wsNode: Hex | null): UseQueryResult<WorkspaceMemberSet> {
   const publicClient = usePublicClient();
@@ -109,91 +108,14 @@ export function useWorkspaceMembers(wsNode: Hex | null): UseQueryResult<Workspac
     queryFn: async (): Promise<WorkspaceMemberSet> => {
       if (publicClient === undefined || wsNode === null) return { members: [] };
 
-      // Fetch both event types in parallel, then walk in chronological
-      // order to compute the final active set.
-      const [addedLogs, removedLogs] = await Promise.all([
-        publicClient.getLogs({
-          address: WORKSPACE_REGISTRY_ADDRESS,
-          event: MEMBER_ADDED_EVENT,
-          args: { wsNode },
-          fromBlock: FROM_BLOCK,
-          toBlock: "latest",
-        }),
-        publicClient.getLogs({
-          address: WORKSPACE_REGISTRY_ADDRESS,
-          event: MEMBER_REMOVED_EVENT,
-          args: { wsNode },
-          fromBlock: FROM_BLOCK,
-          toBlock: "latest",
-        }),
-      ]);
+      const members = (await publicClient.readContract({
+        address: WORKSPACE_REGISTRY_ADDRESS,
+        abi: WorkspaceRegistryAbi,
+        functionName: "membersOf",
+        args: [wsNode],
+      }));
 
-      interface EventRow {
-        kind: "added" | "removed";
-        address: Address;
-        block: bigint;
-        logIndex: number;
-      }
-
-      function rowFromAddedLog(log: (typeof addedLogs)[number]): EventRow {
-        const member = log.args.member;
-        if (member === undefined) {
-          throw new Error("MemberAdded log missing member arg");
-        }
-        return {
-          kind: "added",
-          address: member,
-          block: log.blockNumber,
-          logIndex: log.logIndex,
-        };
-      }
-
-      function rowFromRemovedLog(log: (typeof removedLogs)[number]): EventRow {
-        const member = log.args.member;
-        if (member === undefined) {
-          throw new Error("MemberRemoved log missing member arg");
-        }
-        return {
-          kind: "removed",
-          address: member,
-          block: log.blockNumber,
-          logIndex: log.logIndex,
-        };
-      }
-
-      const events: EventRow[] = [
-        ...addedLogs.map(rowFromAddedLog),
-        ...removedLogs.map(rowFromRemovedLog),
-      ];
-
-      events.sort((a, b) => {
-        if (a.block === b.block) return a.logIndex - b.logIndex;
-        return a.block < b.block ? -1 : 1;
-      });
-
-      const isActive = new Map<string, boolean>();
-      const insertionOrder: string[] = [];
-      for (const event of events) {
-        const key = event.address.toLowerCase();
-        if (!isActive.has(key)) insertionOrder.push(key);
-        isActive.set(key, event.kind === "added");
-      }
-
-      const original = new Map<string, Address>();
-      for (const event of events) {
-        const key = event.address.toLowerCase();
-        if (!original.has(key)) original.set(key, event.address);
-      }
-
-      const members: Address[] = insertionOrder
-        .filter((key) => isActive.get(key) === true)
-        .map((key) => {
-          const addr = original.get(key);
-          if (addr === undefined) throw new Error("invariant: missing original address");
-          return addr;
-        });
-
-      return { members };
+      return { members: [...members] };
     },
     staleTime: STALE_MS,
     refetchInterval: STALE_MS,

@@ -14,18 +14,21 @@
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import Link from "next/link";
-import { useId, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useId, useMemo, useState } from "react";
 import type { SyntheticEvent } from "react";
 import { sepoliaDeployment } from "@kanbantic/shared";
 import { cn } from "@kanbantic/ui";
-import { keccak256, parseEther, stringToBytes } from "viem";
+import { parseEther, stringToBytes } from "viem";
 import { useAccount, useWaitForTransactionReceipt } from "wagmi";
 
 import { useBountyBoard } from "../_lib/contracts.js";
+import { uploadToSwarm, useSiwe } from "../_lib/siwe.js";
 
 const ETHERSCAN_TX = "https://sepolia.etherscan.io/tx";
 const PUBLIC_WORKSPACE = sepoliaDeployment.ens.rootNamehash;
 const ARBITER_COUNCIL = sepoliaDeployment.contracts.ArbiterCouncil;
+const NAMEHASH_RE = /^0x[0-9a-fA-F]{64}$/;
 
 interface FormState {
   capability: string;
@@ -97,7 +100,24 @@ function parseClaimWindow(raw: string): ParsedClaimWindow {
 }
 
 export default function PostBountyPage() {
+  return (
+    <Suspense fallback={null}>
+      <PostBountyForm />
+    </Suspense>
+  );
+}
+
+function PostBountyForm() {
   const { isConnected } = useAccount();
+  const search = useSearchParams();
+  const wsParam = search.get("workspace");
+  const workspaceNode = useMemo<`0x${string}`>(() => {
+    if (wsParam !== null && NAMEHASH_RE.test(wsParam)) {
+      return wsParam as `0x${string}`;
+    }
+    return PUBLIC_WORKSPACE;
+  }, [wsParam]);
+  const isWorkspaceScoped = workspaceNode !== PUBLIC_WORKSPACE;
 
   const capId = useId();
   const rewardId = useId();
@@ -109,6 +129,7 @@ export default function PostBountyPage() {
 
   const { post, isPending, error, hash, reset } = useBountyBoard();
   const receipt = useWaitForTransactionReceipt({ hash });
+  const { ensureSession, isSigning } = useSiwe();
 
   const reward = useMemo(() => parseReward(state.rewardEth), [state.rewardEth]);
   const expiry = useMemo(() => parseExpiry(state.expiresAtLocal), [state.expiresAtLocal]);
@@ -126,26 +147,40 @@ export default function PostBountyPage() {
     return null;
   }, [state.capability, state.description, reward.error, expiry.error, claimWindow.error]);
 
-  const descriptionRef = useMemo<`0x${string}` | null>(() => {
-    const trimmed = state.description.trim();
-    if (!trimmed) return null;
-    return keccak256(stringToBytes(trimmed));
-  }, [state.description]);
+  const [uploadStatus, setUploadStatus] = useState<
+    | { kind: "idle" }
+    | { kind: "uploading" }
+    | { kind: "uploaded"; ref: `0x${string}` }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
 
   function update<K extends keyof FormState>(field: K, value: FormState[K]) {
     setState((prev) => ({ ...prev, [field]: value }));
   }
 
-  function onSubmit(event: SyntheticEvent<HTMLFormElement>) {
+  async function onSubmit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     if (
-      validationError ||
+      validationError !== null ||
       isPending ||
       reward.wei === null ||
       expiry.unixSeconds === null ||
-      claimWindow.blocks === null ||
-      descriptionRef === null
+      claimWindow.blocks === null
     ) {
+      return;
+    }
+
+    setUploadStatus({ kind: "uploading" });
+    let descriptionRef: `0x${string}`;
+    try {
+      const session = await ensureSession();
+      const bytes = stringToBytes(state.description.trim());
+      const uploaded = await uploadToSwarm({ token: session.token, bytes });
+      descriptionRef = uploaded.ref;
+      setUploadStatus({ kind: "uploaded", ref: uploaded.ref });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setUploadStatus({ kind: "error", message });
       return;
     }
 
@@ -155,7 +190,7 @@ export default function PostBountyPage() {
       descriptionRef,
       expiresAt: expiry.unixSeconds,
       claimWindowBlocks: claimWindow.blocks,
-      workspaceNode: PUBLIC_WORKSPACE,
+      workspaceNode,
       arbiterCouncil: ARBITER_COUNCIL,
     });
   }
@@ -180,15 +215,22 @@ export default function PostBountyPage() {
   return (
     <section className="mx-auto max-w-2xl py-12">
       <header className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Post a bounty</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Post a task</h1>
         <p className="mt-2 text-sm text-[var(--color-kanbantic-muted)]">
           Escrows ETH in <span className="font-mono">BountyBoard</span> on Sepolia. Agents matching
           the capability filter can claim and submit work.
         </p>
+        {isWorkspaceScoped ? (
+          <p className="mt-3 inline-block self-start rounded-md border border-[var(--color-kanbantic-accent)]/40 bg-[var(--color-kanbantic-accent)]/5 px-2.5 py-1 font-mono text-[11px] text-[var(--color-kanbantic-accent)]">
+            workspace: {workspaceNode.slice(0, 10)}…{workspaceNode.slice(-6)}
+          </p>
+        ) : null}
       </header>
 
       <form
-        onSubmit={onSubmit}
+        onSubmit={(event) => {
+          void onSubmit(event);
+        }}
         className="flex flex-col gap-6 rounded-lg border border-white/10 bg-white/[0.02] p-6"
       >
         <fieldset disabled={submitting} className="flex flex-col gap-6">
@@ -258,13 +300,22 @@ export default function PostBountyPage() {
               placeholder="What needs to be done? Acceptance criteria?"
               className="rounded-md border border-white/10 bg-transparent px-3 py-2 text-sm focus:border-[var(--color-kanbantic-accent)] focus:outline-none"
             />
-            {descriptionRef ? (
+            {uploadStatus.kind === "uploaded" ? (
               <p className="text-xs text-[var(--color-kanbantic-muted)]">
-                descriptionRef:{" "}
+                Uploaded to Swarm. descriptionRef:{" "}
                 <span className="break-all font-mono text-[var(--color-kanbantic-fg)]/70">
-                  {descriptionRef}
+                  {uploadStatus.ref}
                 </span>
               </p>
+            ) : (
+              <p className="text-xs text-[var(--color-kanbantic-muted)]">
+                On submit, the description is uploaded to Swarm via{" "}
+                <span className="font-mono">/api/upload</span> and only the BMT keccak256 root lands
+                on chain.
+              </p>
+            )}
+            {uploadStatus.kind === "error" ? (
+              <p className="text-xs text-red-400">Upload failed: {uploadStatus.message}</p>
             ) : null}
           </div>
 
@@ -319,20 +370,30 @@ export default function PostBountyPage() {
 
         <button
           type="submit"
-          disabled={validationError !== null || submitting || (submitted && !receipt.isError)}
+          disabled={
+            validationError !== null ||
+            submitting ||
+            isSigning ||
+            uploadStatus.kind === "uploading" ||
+            (submitted && !receipt.isError)
+          }
           className={cn(
             "rounded-md px-4 py-2.5 text-sm font-semibold transition-opacity",
             "bg-[var(--color-kanbantic-accent)] text-[var(--color-kanbantic-bg)]",
             "disabled:cursor-not-allowed disabled:opacity-50 hover:enabled:opacity-90",
           )}
         >
-          {submitting
+          {isSigning
             ? "Sign in wallet…"
-            : submitted && !confirmed && !receipt.isError
-              ? "Submitting…"
-              : confirmed
-                ? "Posted"
-                : "Post bounty"}
+            : uploadStatus.kind === "uploading"
+              ? "Uploading to Swarm…"
+              : submitting
+                ? "Sign in wallet…"
+                : submitted && !confirmed && !receipt.isError
+                  ? "Submitting…"
+                  : confirmed
+                    ? "Posted"
+                    : "Post task"}
         </button>
 
         {validationError && !submitted ? (

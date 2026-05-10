@@ -2,70 +2,25 @@
  * `/work` — kanban-style task board.
  *
  * Server component. Pulls all bounties (capability/poster filters
- * still apply via query params) and groups them into Open / Claimed /
- * Submitted / Resolved columns. Single-click access to "Post a task"
- * lives at the top.
+ * still apply via query params) and renders them via the shared
+ * KanbanBoard component. Single-click access to "Create task" lives
+ * at the top.
  */
 
 import Link from "next/link";
 import { Suspense } from "react";
 
-import type { BountySummary } from "@kanbantic/shared";
-
 import { getWork } from "../_lib/api.js";
-import { BountyCard } from "./_ui/BountyCard.js";
+import { KanbanBoard } from "../_ui/KanbanBoard.js";
 import { WorkFilters } from "./_ui/WorkFilters.js";
 
 interface WorkPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-interface Column {
-  key: "open" | "claimed" | "submitted" | "resolved";
-  label: string;
-  /** Statuses from the contract that bucket into this column. */
-  statuses: readonly string[];
-  /** Helper copy when the column is empty. */
-  empty: string;
-}
-
-const COLUMNS: readonly Column[] = [
-  {
-    key: "open",
-    label: "Open",
-    statuses: ["Open", "ClaimWindowOpen"],
-    empty: "Nothing to claim right now.",
-  },
-  {
-    key: "claimed",
-    label: "Claimed",
-    statuses: ["Claimed"],
-    empty: "No tasks in progress.",
-  },
-  {
-    key: "submitted",
-    label: "Submitted",
-    statuses: ["Submitted"],
-    empty: "No proofs awaiting review.",
-  },
-  {
-    key: "resolved",
-    label: "Done",
-    statuses: ["Resolved", "Refunded", "Disputed"],
-    empty: "No settled tasks yet.",
-  },
-];
-
 function pickString(value: string | string[] | undefined): string | undefined {
   if (typeof value === "string" && value.length > 0) return value;
   return undefined;
-}
-
-function bucketFor(status: string): Column["key"] | null {
-  for (const col of COLUMNS) {
-    if (col.statuses.includes(status)) return col.key;
-  }
-  return null;
 }
 
 export default async function WorkPage({ searchParams }: WorkPageProps) {
@@ -73,19 +28,11 @@ export default async function WorkPage({ searchParams }: WorkPageProps) {
   const capabilityFilter = pickString(params["capability"]);
   const posterFilter = pickString(params["poster"]);
 
-  // Pull a wide page so all four columns are populated. The worker
-  // caps at 200; that's plenty for a hackathon-scale board.
   const { bounties } = await getWork({
     limit: 200,
     capability: capabilityFilter,
     poster: posterFilter,
   });
-
-  const grouped = new Map<Column["key"], BountySummary[]>(COLUMNS.map((c) => [c.key, []]));
-  for (const bounty of bounties) {
-    const key = bucketFor(bounty.status);
-    if (key !== null) grouped.get(key)?.push(bounty);
-  }
 
   const total = bounties.length;
   const hasFilter = capabilityFilter !== undefined || posterFilter !== undefined;
@@ -130,40 +77,7 @@ export default async function WorkPage({ searchParams }: WorkPageProps) {
           </Link>
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-4">
-          {COLUMNS.map((col) => {
-            const items = grouped.get(col.key) ?? [];
-            return (
-              <div
-                key={col.key}
-                className="flex flex-col gap-3 rounded-lg border border-white/10 bg-white/[0.02] p-3"
-                data-testid={`kanban-column-${col.key}`}
-              >
-                <div className="flex items-baseline justify-between gap-2 px-1">
-                  <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--color-kanbantic-fg)]">
-                    {col.label}
-                  </h2>
-                  <span className="font-mono text-xs text-[var(--color-kanbantic-muted)]">
-                    {items.length}
-                  </span>
-                </div>
-                {items.length === 0 ? (
-                  <p className="rounded-md border border-dashed border-white/10 px-3 py-6 text-center text-xs text-[var(--color-kanbantic-muted)]">
-                    {col.empty}
-                  </p>
-                ) : (
-                  <ul className="flex flex-col gap-2">
-                    {items.map((bounty) => (
-                      <li key={bounty.id}>
-                        <BountyCard bounty={bounty} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <KanbanBoard bounties={bounties} />
       )}
     </section>
   );
