@@ -69,6 +69,57 @@ export interface BountyListResponse {
 }
 
 /**
+ * One row from the on-chain `attestations` table — produced by
+ * `ReputationAttestor.Attested` events. `score` is the integer 1-5 the
+ * reviewer cast; `comment_ref` is an optional offchain pointer (Swarm
+ * hash, IPFS CID, ...). `ts` is unix seconds.
+ */
+export interface AttestationSummary {
+  bounty_id: number;
+  reviewer: string;
+  score: number;
+  comment_ref: string | null;
+  ts: number;
+}
+
+/**
+ * One row of the per-bounty status timeline assembled from
+ * `BountyBoard` lifecycle events (`BountyPosted`, `BountyClaimed`,
+ * `BountySubmitted`, `BountyResolved`, `BountyDisputed`,
+ * `BountyRefunded`). `status_from` is null only for the genesis row
+ * (BountyPosted → "Open").
+ */
+export interface BountyHistoryEntry {
+  status_from: string | null;
+  status_to: string;
+  tx_hash: string;
+  block_number: number;
+  ts: number;
+}
+
+/**
+ * `/api/agents/[node]` — full agent record + reputation + recent
+ * attestations + recent bounties this agent has claimed.
+ */
+export interface AgentDetailResponse {
+  agent: AgentSummary;
+  attestations: AttestationSummary[];
+  /** Bounties this agent has claimed (any status), capped at 20. */
+  recent_bounties: BountySummary[];
+}
+
+/**
+ * `/api/work/[id]` — bounty + status timeline + (optional) joined
+ * claimer agent + attestations on this bounty.
+ */
+export interface BountyDetailResponse {
+  bounty: BountySummary;
+  history: BountyHistoryEntry[];
+  claimer_agent: AgentSummary | null;
+  attestations: AttestationSummary[];
+}
+
+/**
  * SpaceComputer Orbitport cTRNG draw — what the worker stores in
  * `orbitport_draws` and what `/api/orbitport/last-draw` returns under
  * `last`. Hex strings are 0x-prefixed lowercase. `used_for_bounty_id` is

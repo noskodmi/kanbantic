@@ -1,10 +1,9 @@
 /**
  * `/work` — bounty browse.
  *
- * Server component. Fetches the public bounty list from the worker API on
- * each request (with a 10s ISR window via `next.revalidate` set inside
- * `getWork`). Filtering happens server-side via the `?status=<value>` search
- * param so URLs are shareable; the chip row is the only client-side island.
+ * Server component. All filtering happens server-side via worker query
+ * params (`?status=`, `?capability=`, `?poster=`) so URLs are
+ * shareable. The chip rows are client islands that mutate the URL.
  *
  * Empty state CTA links to `/post`, which Web 3 is shipping in parallel — the
  * link will 404 until that batch lands; that's expected.
@@ -15,19 +14,35 @@ import Link from "next/link";
 import { getWork } from "../_lib/api.js";
 import { BountyCard } from "./_ui/BountyCard.js";
 import { StatusFilter } from "./_ui/StatusFilter.js";
+import { WorkFilters } from "./_ui/WorkFilters.js";
 
 interface WorkPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
+function pickString(value: string | string[] | undefined): string | undefined {
+  if (typeof value === "string" && value.length > 0) return value;
+  return undefined;
+}
+
 export default async function WorkPage({ searchParams }: WorkPageProps) {
   const params = await searchParams;
-  const rawStatus = params["status"];
-  const statusFilter = typeof rawStatus === "string" ? rawStatus : null;
+  const statusFilter = pickString(params["status"]);
+  const capabilityFilter = pickString(params["capability"]);
+  const posterFilter = pickString(params["poster"]);
 
-  const { bounties } = await getWork(50);
-  const filtered =
-    statusFilter === null ? bounties : bounties.filter((bounty) => bounty.status === statusFilter);
+  const { bounties } = await getWork({
+    limit: 50,
+    status: statusFilter,
+    capability: capabilityFilter,
+    poster: posterFilter,
+  });
+
+  // Client-side null-out: the worker already filtered, so `bounties` is
+  // the right list. We only branch the empty-state copy on whether
+  // any filter is applied.
+  const hasFilter =
+    statusFilter !== undefined || capabilityFilter !== undefined || posterFilter !== undefined;
 
   return (
     <section className="flex flex-col gap-6 py-8">
@@ -40,13 +55,14 @@ export default async function WorkPage({ searchParams }: WorkPageProps) {
       </header>
 
       <StatusFilter />
+      <WorkFilters />
 
-      {filtered.length === 0 ? (
+      {bounties.length === 0 ? (
         <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-white/15 bg-white/[0.02] px-6 py-16 text-center">
           <p className="text-sm text-[var(--color-kanbantic-muted)]">
-            {statusFilter === null
-              ? "No bounties yet — be the first to post"
-              : `No bounties match status “${statusFilter}”.`}
+            {hasFilter
+              ? "No bounties match the current filters."
+              : "No bounties yet — be the first to post"}
           </p>
           <Link
             href="/post"
@@ -57,7 +73,7 @@ export default async function WorkPage({ searchParams }: WorkPageProps) {
         </div>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((bounty) => (
+          {bounties.map((bounty) => (
             <li key={bounty.id}>
               <BountyCard bounty={bounty} />
             </li>

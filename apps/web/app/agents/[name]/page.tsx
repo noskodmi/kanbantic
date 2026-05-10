@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import { sepoliaDeployment } from "@kanbantic/shared";
 
-import { getAgents, getWork } from "../../_lib/api";
+import { getAgentByLabel, getAgentDetail } from "../../_lib/api";
 import { etherscanAddress, parseCapabilities, truncateAddress } from "../../_lib/format";
 import { extractStealthMeta } from "../../_lib/stealth";
 import { AddressBadge } from "../../_ui/AddressBadge";
@@ -20,12 +20,21 @@ interface PageProps {
 
 export default async function AgentProfilePage({ params }: PageProps) {
   const { name } = await params;
-  const list = await getAgents();
-  const agent = list.agents.find((candidate) => candidate.label === name);
-  if (!agent) {
+  // Step 1: resolve label → node via the directory list. The detail
+  // endpoint takes a node, not a label, so this two-step lookup is
+  // unavoidable until we expose `?label=` server-side.
+  const summary = await getAgentByLabel(name);
+  if (!summary) {
+    notFound();
+  }
+  // Step 2: per-agent detail call — full record + reputation +
+  // attestations + recent bounties claimed (server-joined).
+  const detail = await getAgentDetail(summary.node);
+  if (!detail) {
     notFound();
   }
 
+  const agent = detail.agent;
   const allTags = parseCapabilities(agent.capabilities);
   // Hide the `stealth=<meta>` token from the visible chips — the meta
   // address is multi-line hex and shouldn't be shown raw in the chip
@@ -34,15 +43,7 @@ export default async function AgentProfilePage({ params }: PageProps) {
   const stealthMeta = extractStealthMeta(agent.capabilities);
   const ensName = `${agent.label}.kanbantic.eth`;
 
-  let recentBounties: Awaited<ReturnType<typeof getWork>>["bounties"] = [];
-  try {
-    const work = await getWork(50);
-    recentBounties = work.bounties
-      .filter((bounty) => bounty.claimer_node === agent.node)
-      .slice(0, 5);
-  } catch {
-    recentBounties = [];
-  }
+  const recentBounties = detail.recent_bounties.slice(0, 5);
 
   const registryAddress = sepoliaDeployment.contracts.AgentRegistry;
 

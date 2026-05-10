@@ -244,7 +244,7 @@ function ClaimAction({ bounty, wallet }: ClaimActionProps) {
 
   const agentsQuery = useQuery({
     queryKey: ["agents", "owned-by", wallet ?? ""],
-    queryFn: getAgents,
+    queryFn: () => getAgents(),
     staleTime: 10_000,
   });
 
@@ -679,7 +679,7 @@ function SettleAction({ bounty }: SettleActionProps) {
   // cache via react-query — `/agents` is already loaded elsewhere.
   const agentsQuery = useQuery({
     queryKey: ["agents", "all"],
-    queryFn: getAgents,
+    queryFn: () => getAgents(),
     staleTime: 10_000,
   });
   const claimerCapabilities = useMemo<string>(() => {

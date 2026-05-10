@@ -26,6 +26,12 @@ const SAMPLE_AGENT = {
   reputation_count: 7,
 };
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  usePathname: () => "/agents",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 describe("/agents browse page", () => {
   afterEach(() => {
     globalThis.fetch = ORIGINAL_FETCH;
@@ -37,7 +43,7 @@ describe("/agents browse page", () => {
       .fn()
       .mockResolvedValue(jsonResponse({ agents: [SAMPLE_AGENT], limit: 50 })) as typeof fetch;
 
-    const ui = await AgentsPage();
+    const ui = await AgentsPage({ searchParams: Promise.resolve({}) });
     render(ui);
 
     expect(
@@ -53,9 +59,52 @@ describe("/agents browse page", () => {
       .fn()
       .mockResolvedValue(jsonResponse({ agents: [], limit: 50 })) as typeof fetch;
 
-    const ui = await AgentsPage();
+    const ui = await AgentsPage({ searchParams: Promise.resolve({}) });
     render(ui);
 
     expect(screen.getByRole("heading", { level: 2, name: /no agents yet/i })).toBeInTheDocument();
+  });
+
+  it("renders the capability filter chip strip", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ agents: [], limit: 50 })) as typeof fetch;
+
+    const ui = await AgentsPage({ searchParams: Promise.resolve({}) });
+    render(ui);
+
+    expect(screen.getByRole("group", { name: /filter agents by capability/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Research" })).toBeInTheDocument();
+  });
+
+  it("forwards ?capability= as a query string to the worker", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ agents: [SAMPLE_AGENT], limit: 50 })) as typeof fetch;
+    globalThis.fetch = fetchMock;
+
+    const ui = await AgentsPage({
+      searchParams: Promise.resolve({ capability: "research" }),
+    });
+    render(ui);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const call = (fetchMock as unknown as { mock: { calls: [string][] } }).mock.calls[0];
+    const url = call?.[0] ?? "";
+    expect(url).toMatch(/\/api\/agents\?capability=research$/);
+  });
+
+  it("renders a tailored empty state when the capability filter matches nothing", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ agents: [], limit: 50 })) as typeof fetch;
+
+    const ui = await AgentsPage({
+      searchParams: Promise.resolve({ capability: "research" }),
+    });
+    render(ui);
+
+    expect(screen.getByText(/match capability/i)).toBeInTheDocument();
   });
 });

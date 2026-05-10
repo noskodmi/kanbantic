@@ -1,5 +1,6 @@
 import { type Address, parseEther } from "viem";
 
+import { agentDetailHandler } from "./api/agent-detail.js";
 import { agentsHandler } from "./api/agents.js";
 import { ccipReadHandler } from "./api/ccip-read.js";
 import { contractIntelligenceHandler } from "./api/contract-intelligence.js";
@@ -7,6 +8,7 @@ import { mcpHandler } from "./api/mcp.js";
 import { orbitportLastDrawHandler } from "./api/orbitport.js";
 import { refreshHandler } from "./api/refresh.js";
 import { statusHandler } from "./api/status.js";
+import { workDetailHandler } from "./api/work-detail.js";
 import { workHandler } from "./api/work.js";
 import type { Env } from "./env.js";
 import { Router } from "./router.js";
@@ -47,7 +49,12 @@ const paidContractIntelligenceHandler: (
 const router = new Router();
 router.add({ method: "GET", path: "/api/status", handler: statusHandler });
 router.add({ method: "GET", path: "/api/agents", handler: agentsHandler });
+// Per-agent and per-bounty detail endpoints. Path-param routes registered
+// AFTER the list routes so the literal `/api/agents` pattern matches first
+// (the router scans in registration order).
+router.add({ method: "GET", path: "/api/agents/:node", handler: agentDetailHandler });
 router.add({ method: "GET", path: "/api/work", handler: workHandler });
+router.add({ method: "GET", path: "/api/work/:id", handler: workDetailHandler });
 router.add({
   method: "GET",
   path: "/api/orbitport/last-draw",

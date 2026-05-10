@@ -1,10 +1,9 @@
 /**
  * `/work/[id]` — bounty detail (read-side).
  *
- * Server component. Until the worker exposes a per-bounty endpoint
- * (Phase 2B will add `/api/work/[id]` with a full state-transition timeline),
- * we fetch the parent list with a generous limit and locate the row in
- * memory. If the id isn't present the request 404s.
+ * Server component. Phase 2B's `/api/work/[id]` returns the full
+ * bounty + status timeline (from `bounty_history`) + joined claimer
+ * agent + on-bounty attestations in one round-trip.
  *
  * Wallet-gated write CTAs (claim / commit-claim / submit / accept /
  * reject + the EIP-712-free attestation flow) live in the
@@ -18,7 +17,7 @@ import { notFound } from "next/navigation";
 
 import { sepoliaDeployment } from "@kanbantic/shared";
 
-import { getWork } from "../../_lib/api.js";
+import { getWorkDetail } from "../../_lib/api.js";
 import { etherscanAddress, truncateAddress } from "../../_lib/format.js";
 import { StatusPill } from "../_ui/StatusPill.js";
 import { formatEth, relativeTime } from "../_lib/format.js";
@@ -41,15 +40,20 @@ interface WorkDetailPageProps {
 export default async function WorkDetailPage({ params }: WorkDetailPageProps) {
   const { id } = await params;
 
-  const { bounties } = await getWork(200);
-  const bounty = bounties.find((row) => row.id === id);
-  if (bounty === undefined) {
+  const detail = await getWorkDetail(id);
+  if (!detail) {
     notFound();
   }
+  const bounty = detail.bounty;
 
   const showClaimer = STATUSES_AFTER_CLAIMED.has(bounty.status) && bounty.claimer_address !== null;
   const showProof = STATUSES_AFTER_SUBMITTED.has(bounty.status);
   const bountyBoardEtherscan = etherscanAddress(sepoliaDeployment.contracts.BountyBoard);
+  // Genesis row of the timeline always exists for an indexed bounty
+  // (`BountyPosted` → "Open"), so we render the full server-side
+  // history when present and fall back to the synthesized two-row
+  // view (Posted + current) only if no history was indexed yet.
+  const historyEntries = detail.history;
 
   return (
     <article className="flex flex-col gap-8 py-8">
@@ -110,37 +114,59 @@ export default async function WorkDetailPage({ params }: WorkDetailPageProps) {
           Status timeline
         </h2>
         <ol className="flex flex-col gap-3 rounded-lg border border-white/10 bg-white/[0.02] p-4 text-sm">
-          <li className="flex items-baseline gap-3">
-            <span
-              className="inline-block h-2 w-2 shrink-0 translate-y-1 rounded-full bg-emerald-400"
-              aria-hidden="true"
-            />
-            <div className="flex flex-col">
-              <span className="font-semibold">Posted</span>
-              <span className="text-xs text-[var(--color-kanbantic-muted)]">
-                block {String(bounty.created_at_block)} · {relativeTime(bounty.created_at_ts)}
-              </span>
-            </div>
-          </li>
-          <li className="flex items-baseline gap-3">
-            <span
-              className="inline-block h-2 w-2 shrink-0 translate-y-1 rounded-full bg-sky-400"
-              aria-hidden="true"
-            />
-            <div className="flex flex-col">
-              <span className="font-semibold">Current state · {bounty.status}</span>
-              <span className="text-xs text-[var(--color-kanbantic-muted)]">
-                {bounty.resolved_at_block === null
-                  ? "in progress on-chain"
-                  : `resolved at block ${String(bounty.resolved_at_block)}`}
-              </span>
-            </div>
-          </li>
+          {historyEntries.length > 0 ? (
+            historyEntries.map((entry, idx) => (
+              <li
+                key={`${String(entry.block_number)}-${entry.tx_hash}-${String(idx)}`}
+                className="flex items-baseline gap-3"
+              >
+                <span
+                  className="inline-block h-2 w-2 shrink-0 translate-y-1 rounded-full bg-emerald-400"
+                  aria-hidden="true"
+                />
+                <div className="flex flex-col">
+                  <span className="font-semibold">
+                    {entry.status_from === null
+                      ? `Posted (${entry.status_to})`
+                      : `${entry.status_from} → ${entry.status_to}`}
+                  </span>
+                  <span className="text-xs text-[var(--color-kanbantic-muted)]">
+                    block {String(entry.block_number)} · {relativeTime(entry.ts)}
+                  </span>
+                </div>
+              </li>
+            ))
+          ) : (
+            <>
+              <li className="flex items-baseline gap-3">
+                <span
+                  className="inline-block h-2 w-2 shrink-0 translate-y-1 rounded-full bg-emerald-400"
+                  aria-hidden="true"
+                />
+                <div className="flex flex-col">
+                  <span className="font-semibold">Posted</span>
+                  <span className="text-xs text-[var(--color-kanbantic-muted)]">
+                    block {String(bounty.created_at_block)} · {relativeTime(bounty.created_at_ts)}
+                  </span>
+                </div>
+              </li>
+              <li className="flex items-baseline gap-3">
+                <span
+                  className="inline-block h-2 w-2 shrink-0 translate-y-1 rounded-full bg-sky-400"
+                  aria-hidden="true"
+                />
+                <div className="flex flex-col">
+                  <span className="font-semibold">Current state · {bounty.status}</span>
+                  <span className="text-xs text-[var(--color-kanbantic-muted)]">
+                    {bounty.resolved_at_block === null
+                      ? "in progress on-chain"
+                      : `resolved at block ${String(bounty.resolved_at_block)}`}
+                  </span>
+                </div>
+              </li>
+            </>
+          )}
         </ol>
-        <p className="text-xs text-[var(--color-kanbantic-muted)]">
-          Full state-transition history (claim / submit / resolve timestamps) ships with the
-          worker&apos;s <code className="font-mono">/api/work/[id]</code> endpoint in Phase 2B.
-        </p>
       </section>
 
       {showClaimer && bounty.claimer_address !== null ? (
@@ -149,7 +175,14 @@ export default async function WorkDetailPage({ params }: WorkDetailPageProps) {
             Claimer
           </h2>
           <div className="flex flex-col gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-4">
-            {bounty.claimer_node !== null && bounty.claimer_node.length > 0 ? (
+            {detail.claimer_agent !== null ? (
+              <Link
+                href={`/agents/${detail.claimer_agent.label}` as Route}
+                className="font-semibold text-[var(--color-kanbantic-accent)] hover:underline"
+              >
+                {detail.claimer_agent.label}.kanbantic.eth
+              </Link>
+            ) : bounty.claimer_node !== null && bounty.claimer_node.length > 0 ? (
               <Link
                 href={`/agents/${bounty.claimer_node}` as Route}
                 className="font-semibold text-[var(--color-kanbantic-accent)] hover:underline"

@@ -2,15 +2,24 @@ import type { AgentListResponse } from "@kanbantic/shared";
 
 import { AgentCard } from "../_ui/AgentCard";
 import { getAgents } from "../_lib/api";
+import { CapabilityFilter } from "./_ui/CapabilityFilter";
 
 export const revalidate = 10;
 
-export default async function AgentsPage() {
+interface AgentsPageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export default async function AgentsPage({ searchParams }: AgentsPageProps) {
+  const params = await searchParams;
+  const rawCapability = params["capability"];
+  const capabilityFilter = typeof rawCapability === "string" ? rawCapability : undefined;
+
   let data: AgentListResponse | null = null;
   let fetchError: string | null = null;
 
   try {
-    data = await getAgents();
+    data = await getAgents(capabilityFilter !== undefined ? { capability: capabilityFilter } : {});
   } catch (err: unknown) {
     fetchError = err instanceof Error ? err.message : "unknown error";
   }
@@ -25,6 +34,8 @@ export default async function AgentsPage() {
           <code className="font-mono">tools/list</code> live.
         </p>
       </header>
+
+      <CapabilityFilter />
 
       {fetchError ? (
         <EmptyState
@@ -47,13 +58,22 @@ export default async function AgentsPage() {
         </ul>
       ) : (
         <EmptyState
-          headline="No agents yet."
+          headline={
+            capabilityFilter !== undefined
+              ? `No agents match capability “${capabilityFilter}”.`
+              : "No agents yet."
+          }
           body={
-            <>
-              The directory is empty. Once an owner calls{" "}
-              <code className="font-mono">AgentRegistry.registerAgent</code> on Sepolia, the indexer
-              picks it up within a few seconds and the new card lands here on next revalidation.
-            </>
+            capabilityFilter !== undefined ? (
+              <>Try clearing the filter — or wait for an agent with that capability to register.</>
+            ) : (
+              <>
+                The directory is empty. Once an owner calls{" "}
+                <code className="font-mono">AgentRegistry.registerAgent</code> on Sepolia, the
+                indexer picks it up within a few seconds and the new card lands here on next
+                revalidation.
+              </>
+            )
           }
         />
       )}

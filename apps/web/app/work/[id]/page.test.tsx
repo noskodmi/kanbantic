@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { BountyListResponse, BountySummary } from "@kanbantic/shared";
+import type { BountyDetailResponse, BountySummary } from "@kanbantic/shared";
 
 // Page renders <WorkActions> (client island) which calls wagmi/rainbowkit
 // hooks. Provider stack isn't wired up in unit tests — mock the hook
@@ -63,13 +63,37 @@ function mockBounty(overrides: Partial<BountySummary>): BountySummary {
   };
 }
 
-function mockFetch(payload: BountyListResponse): void {
-  globalThis.fetch = vi.fn().mockResolvedValue(
-    new Response(JSON.stringify(payload), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    }),
-  ) as typeof fetch;
+/**
+ * The page now calls `/api/work/:id` (returns `BountyDetailResponse`).
+ * The legacy mock that returned a `BountyListResponse` no longer
+ * matches the wire shape — tests pass the detail payload directly.
+ */
+function mockFetchDetail(detail: BountyDetailResponse | null): void {
+  globalThis.fetch = vi.fn().mockImplementation(() => {
+    if (detail === null) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: "not_found" }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    }
+    return Promise.resolve(
+      new Response(JSON.stringify(detail), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  }) as typeof fetch;
+}
+
+function detailFor(bounty: BountySummary): BountyDetailResponse {
+  return {
+    bounty,
+    history: [],
+    claimer_agent: null,
+    attestations: [],
+  };
 }
 
 async function renderDetail(id: string): Promise<void> {
@@ -84,17 +108,16 @@ describe("/work/[id] detail page", () => {
   });
 
   it("renders bounty id, reward, and status pill for an Open bounty", async () => {
-    mockFetch({
-      bounties: [
+    mockFetchDetail(
+      detailFor(
         mockBounty({
           id: "42",
           capability: "summarize-paper",
           reward: "250000000000000000",
           status: "Open",
         }),
-      ],
-      limit: 50,
-    });
+      ),
+    );
 
     await renderDetail("42");
 
@@ -105,10 +128,7 @@ describe("/work/[id] detail page", () => {
   });
 
   it("hides the claimer section when the bounty status is Open", async () => {
-    mockFetch({
-      bounties: [mockBounty({ id: "7", status: "Open" })],
-      limit: 50,
-    });
+    mockFetchDetail(detailFor(mockBounty({ id: "7", status: "Open" })));
 
     await renderDetail("7");
 
@@ -116,17 +136,16 @@ describe("/work/[id] detail page", () => {
   });
 
   it("renders the proof viewer placeholder for Submitted bounties", async () => {
-    mockFetch({
-      bounties: [
+    mockFetchDetail(
+      detailFor(
         mockBounty({
           id: "9",
           status: "Submitted",
           claimer_node: "alpha.kanbantic.eth",
           claimer_address: "0x3333333333333333333333333333333333333333",
         }),
-      ],
-      limit: 50,
-    });
+      ),
+    );
 
     await renderDetail("9");
 

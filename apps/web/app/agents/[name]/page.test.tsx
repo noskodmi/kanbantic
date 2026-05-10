@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { AgentDetailResponse } from "@kanbantic/shared";
+
 import AgentProfilePage from "./page.js";
 
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -26,9 +28,26 @@ const SAMPLE_AGENT = {
   reputation_count: 7,
 };
 
+function detail(): AgentDetailResponse {
+  return {
+    agent: SAMPLE_AGENT,
+    attestations: [],
+    recent_bounties: [],
+  };
+}
+
+/**
+ * The page first calls `/api/agents` (label → node lookup) and then
+ * `/api/agents/:node` (detail). Route by URL so both calls succeed.
+ */
 function mockFetchByUrl() {
   return vi.fn((input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    // Detail endpoint must match before the bare list endpoint, since
+    // both contain "/api/agents".
+    if (url.includes("/api/agents/0x")) {
+      return Promise.resolve(jsonResponse(detail()));
+    }
     if (url.includes("/api/agents")) {
       return Promise.resolve(jsonResponse({ agents: [SAMPLE_AGENT], limit: 50 }));
     }
