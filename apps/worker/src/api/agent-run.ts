@@ -224,6 +224,57 @@ async function submitOnChain(args: {
 }
 
 /**
+ * Broadcast `BountyBoard.claim(bountyId, agentNode)` from the worker
+ * deployer wallet. Returns the tx hash on success, throws otherwise.
+ *
+ * Used by the auto-run path: when an Open bounty matches the agent
+ * the deployer is registered as the owner of, we claim from the
+ * worker key without requiring the human owner to sign.
+ */
+async function claimOnChain(args: {
+  env: Env;
+  bountyId: bigint;
+  agentNode: `0x${string}`;
+}): Promise<`0x${string}`> {
+  const pk = args.env.WORKER_DEPLOYER_PRIVATE_KEY;
+  if (pk === undefined || pk.length === 0) {
+    throw new Error("WORKER_DEPLOYER_PRIVATE_KEY not set — auto-claim disabled");
+  }
+  const { sepoliaDeployment, BountyBoardAbi } = await import("@kanbantic/shared");
+  const { createPublicClient, createWalletClient, defineChain, encodeFunctionData, http } =
+    await import("viem");
+  const { privateKeyToAccount } = await import("viem/accounts");
+
+  const account = privateKeyToAccount(pk as Hex);
+  const sepoliaChain = defineChain({
+    id: 11155111,
+    name: "Sepolia",
+    nativeCurrency: { name: "Sepolia Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: { default: { http: [args.env.SEPOLIA_RPC] } },
+  });
+  const transport = http(args.env.SEPOLIA_RPC);
+  const wallet = createWalletClient({ account, chain: sepoliaChain, transport });
+  const publicClient = createPublicClient({ chain: sepoliaChain, transport });
+
+  const data = encodeFunctionData({
+    abi: BountyBoardAbi,
+    functionName: "claim",
+    args: [args.bountyId, args.agentNode],
+  });
+  const gas = await publicClient.estimateGas({
+    account,
+    to: sepoliaDeployment.contracts.BountyBoard,
+    data,
+  });
+  const cappedGas = gas > 500_000n ? 500_000n : gas;
+  return wallet.sendTransaction({
+    to: sepoliaDeployment.contracts.BountyBoard,
+    data,
+    gas: cappedGas,
+  });
+}
+
+/**
  * Insert the agent_runs row + return its id so we can stamp finished_at
  * + status on success/failure.
  */
@@ -498,4 +549,283 @@ export async function agentRunHandler(request: Request, env: Env): Promise<Respo
     runDurationMs: Date.now() - startedAt,
   };
   return Response.json(responseBody);
+}
+
+/**
+ * POST /api/agent/auto-run
+ *
+ * Body: { agentNode: '0x…32 bytes', bountyId: number }
+ *
+ * Server-driven claim+run for the agent the worker holds the deployer
+ * key for. Skips SIWE because authority is established by checking
+ * `agents.owner === privateKeyToAccount(WORKER_DEPLOYER_PRIVATE_KEY)
+ * .address` — the only agent eligible for auto-run is the one this
+ * worker is custodian of.
+ *
+ * Flow:
+ *   1. Lookup agent + bounty.
+ *   2. Verify deployer is the agent's owner.
+ *   3. If bounty is `Open`, broadcast `BountyBoard.claim` from the
+ *      deployer wallet and wait briefly for the indexer to flip the
+ *      D1 status to `Claimed`. (Skip if already `Claimed` by us.)
+ *   4. Hand off to the same work-loop body the SIWE handler uses by
+ *      crafting a synthetic Request and calling `agentRunHandler`,
+ *      bypassing SIWE via a special internal header.
+ *
+ * The endpoint is not gated by SIWE because the gate is
+ * "do you control the deployer key?" — no, just "is the agent the
+ * deployer's?" Anyone can trigger a run on the deployer-owned agent;
+ * the deployer pays gas, the bounty poster pays the reward, the
+ * proof bundle is honest, and the only risk is some random caller
+ * burning the deployer's gas budget — acceptable for a hackathon
+ * demo where the only registered agent is ours.
+ */
+export async function agentAutoRunHandler(request: Request, env: Env): Promise<Response> {
+  await applyMigrations(env.DB);
+
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    return Response.json(
+      { error: "invalid_json", message: "Body is not valid JSON." },
+      { status: 400 },
+    );
+  }
+  const parsed = parseBody(raw);
+  if ("error" in parsed) {
+    return Response.json({ error: "invalid_request", message: parsed.error }, { status: 400 });
+  }
+
+  const pk = env.WORKER_DEPLOYER_PRIVATE_KEY;
+  if (pk === undefined || pk.length === 0) {
+    return Response.json(
+      { error: "auto_run_disabled", message: "WORKER_DEPLOYER_PRIVATE_KEY not set on the worker." },
+      { status: 503 },
+    );
+  }
+
+  const { privateKeyToAccount } = await import("viem/accounts");
+  const deployerAddress = privateKeyToAccount(pk as Hex).address;
+
+  const agent = await env.DB.prepare(
+    "SELECT node, owner, label, capabilities FROM agents WHERE node = ?",
+  )
+    .bind(parsed.agentNode.toLowerCase())
+    .first<AgentRow>();
+  if (agent === null) {
+    return Response.json(
+      { error: "agent_not_found", message: `Agent ${parsed.agentNode} is not registered.` },
+      { status: 404 },
+    );
+  }
+  if (agent.owner.toLowerCase() !== deployerAddress.toLowerCase()) {
+    return Response.json(
+      {
+        error: "not_deployer_agent",
+        message: `Auto-run is only allowed for agents the worker is custodian of (deployer ${deployerAddress}).`,
+      },
+      { status: 403 },
+    );
+  }
+
+  let bounty = await env.DB.prepare(
+    "SELECT id, status, description_ref, claimer_node, claimer_address FROM bounties WHERE id = ?",
+  )
+    .bind(parsed.bountyId)
+    .first<BountyRow>();
+  if (bounty === null) {
+    return Response.json(
+      { error: "bounty_not_found", message: `Bounty ${String(parsed.bountyId)} does not exist.` },
+      { status: 404 },
+    );
+  }
+
+  let claimTxHash: `0x${string}` | null = null;
+  if (bounty.status === "Open") {
+    try {
+      claimTxHash = await claimOnChain({
+        env,
+        bountyId: BigInt(parsed.bountyId),
+        agentNode: parsed.agentNode.toLowerCase() as `0x${string}`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return Response.json(
+        { error: "claim_failed", message: `BountyBoard.claim reverted: ${message}` },
+        { status: 502 },
+      );
+    }
+
+    // Wait for the indexer alarm tick to flip D1 to Claimed. The DO
+    // alarm fires every ~5s; budget 30s so a slow Sepolia confirmation
+    // doesn't stall the call. Re-fetch the row each iteration.
+    for (let i = 0; i < 6; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      bounty = await env.DB.prepare(
+        "SELECT id, status, description_ref, claimer_node, claimer_address FROM bounties WHERE id = ?",
+      )
+        .bind(parsed.bountyId)
+        .first<BountyRow>();
+      if (bounty?.status === "Claimed") break;
+    }
+    if (bounty?.status !== "Claimed") {
+      return Response.json(
+        {
+          error: "claim_not_indexed",
+          message: `Claim tx broadcast (${claimTxHash}) but indexer hasn't picked it up yet. Retry the auto-run shortly.`,
+          claimTxHash,
+        },
+        { status: 504 },
+      );
+    }
+  }
+
+  if (bounty.status !== "Claimed") {
+    return Response.json(
+      {
+        error: "bounty_not_claimable",
+        message: `Bounty ${String(parsed.bountyId)} is in status '${bounty.status}', not 'Open' or 'Claimed'.`,
+      },
+      { status: 409 },
+    );
+  }
+  if ((bounty.claimer_node ?? "").toLowerCase() !== parsed.agentNode.toLowerCase()) {
+    return Response.json(
+      {
+        error: "not_claimer",
+        message: `Bounty ${String(parsed.bountyId)} was claimed by a different agent.`,
+      },
+      { status: 409 },
+    );
+  }
+
+  // Reuse the work-loop body from agentRunHandler by inlining the
+  // remaining steps (description fetch → LLM → upload → submit).
+  // Refactoring agentRunHandler into a shared helper would be cleaner
+  // but adds review surface; the duplication is bounded.
+  const startedAt = Date.now();
+  const runId = await startRunRow(env, parsed.agentNode.toLowerCase(), parsed.bountyId);
+
+  let descriptionBytes: Uint8Array;
+  try {
+    descriptionBytes = await fetchSwarmRef(env, bounty.description_ref);
+  } catch (err) {
+    console.error("agent-auto-run: description fetch failed", err);
+    return failRun(
+      env,
+      runId,
+      502,
+      "description_unavailable",
+      `Bounty description (${bounty.description_ref}) could not be fetched from Swarm.`,
+    );
+  }
+  const description = new TextDecoder().decode(descriptionBytes);
+  const prompt = buildPrompt(description);
+  const promptDigest = keccak256(new TextEncoder().encode(prompt));
+  const model = resolveModelId(env);
+
+  let answer: string;
+  let llmStub = false;
+  if (env.OPENROUTER_API_KEY) {
+    try {
+      answer = await callOpenRouter(env, prompt, { title: "Kanbantic Agent Auto-Run" });
+    } catch (err) {
+      console.error("agent-auto-run: OpenRouter call failed", err);
+      return failRun(
+        env,
+        runId,
+        502,
+        "llm_unavailable",
+        `OpenRouter call failed: ${err instanceof Error ? err.message : String(err)}.`,
+      );
+    }
+  } else {
+    llmStub = true;
+    answer = `# Stub answer — OPENROUTER_API_KEY not set\n\nBounty description:\n\n${description}\n`;
+  }
+
+  let artefactRef: `0x${string}`;
+  let traceRef: `0x${string}`;
+  let uploadMode: "gateway" | "local";
+  try {
+    const artefactUpload = await uploadBytes(env, new TextEncoder().encode(answer));
+    artefactRef = artefactUpload.ref;
+    const traceUpload = await uploadBytes(
+      env,
+      new TextEncoder().encode(JSON.stringify({ model, prompt, answer, llmStub }, null, 2)),
+    );
+    traceRef = traceUpload.ref;
+    uploadMode = artefactUpload.mode;
+  } catch (err) {
+    console.error("agent-auto-run: artefact upload failed", err);
+    return failRun(
+      env,
+      runId,
+      500,
+      "upload_failed",
+      `Artefact upload failed: ${err instanceof Error ? err.message : String(err)}.`,
+    );
+  }
+
+  const bundleNoSig: ProofBundle = {
+    schema: "kanbantic.proof.v01",
+    bountyId: parsed.bountyId,
+    agentNode: parsed.agentNode.toLowerCase(),
+    promptDigest,
+    artefacts: [{ name: "answer.md", swarmRef: artefactRef }],
+    llmTrace: traceRef,
+    model,
+    generatedAt: Math.floor(Date.now() / 1000),
+    sig: null,
+  };
+  const bundleDigest = keccak256(new TextEncoder().encode(JSON.stringify(bundleNoSig)));
+  const sig = await signProofBundle(env, bundleDigest);
+  const bundle: ProofBundle = { ...bundleNoSig, sig };
+
+  let proofRef: `0x${string}`;
+  try {
+    const bundleUpload = await uploadBytes(
+      env,
+      new TextEncoder().encode(JSON.stringify(bundle, null, 2)),
+    );
+    proofRef = bundleUpload.ref;
+  } catch (err) {
+    console.error("agent-auto-run: proof bundle upload failed", err);
+    return failRun(
+      env,
+      runId,
+      500,
+      "upload_failed",
+      `Proof bundle upload failed: ${err instanceof Error ? err.message : String(err)}.`,
+    );
+  }
+
+  let submitTxHash: `0x${string}` | null = null;
+  try {
+    submitTxHash = await submitOnChain({
+      env,
+      bountyId: BigInt(parsed.bountyId),
+      proofRef,
+      signature: sig,
+      expectedSender: bounty.claimer_address !== null ? getAddress(bounty.claimer_address) : null,
+    });
+  } catch (err) {
+    console.error("agent-auto-run: submit tx failed", err);
+  }
+
+  const finalStatus: "submitted" | "proof_only" =
+    submitTxHash !== null ? "submitted" : "proof_only";
+  await finishRunRow(env, runId, { status: finalStatus, proofRef, txHash: submitTxHash });
+
+  return Response.json({
+    proofRef,
+    claimTxHash,
+    submitTxHash,
+    llmModel: model,
+    llmStub,
+    uploadMode,
+    status: finalStatus,
+    runDurationMs: Date.now() - startedAt,
+  });
 }

@@ -1,7 +1,7 @@
 import { type Address, parseEther } from "viem";
 
 import { agentDetailHandler } from "./api/agent-detail.js";
-import { agentRunHandler } from "./api/agent-run.js";
+import { agentAutoRunHandler, agentRunHandler } from "./api/agent-run.js";
 import { agentsHandler } from "./api/agents.js";
 import { apifyWebhookHandler } from "./api/apify-webhook.js";
 import { ccipReadHandler } from "./api/ccip-read.js";
@@ -116,6 +116,7 @@ router.add({ method: "POST", path: "/api/siwe/verify", handler: siweVerifyHandle
 router.add({ method: "POST", path: "/api/upload", handler: uploadHandler });
 router.add({ method: "GET", path: "/api/swarm/:ref", handler: swarmReadHandler });
 router.add({ method: "POST", path: "/api/agent/run", handler: agentRunHandler });
+router.add({ method: "POST", path: "/api/agent/auto-run", handler: agentAutoRunHandler });
 
 export default {
   async fetch(request, env, ctx) {
